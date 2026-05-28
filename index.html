@@ -580,7 +580,7 @@
                     if (rootZombie.userData.hp <= 0) {
                         scene.remove(rootZombie);
                         zombies = zombies.filter(z => z.userData.root !== rootZombie);
-                        money += 100;
+                        money += 10;
                         document.getElementById('money-display').innerText = money;
 
                         if (zombies.length === 0) {
