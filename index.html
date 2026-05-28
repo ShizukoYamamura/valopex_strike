@@ -762,7 +762,8 @@
                 const baseSpeed = 40.0;
                 let playerSpeed = baseSpeed;
                 if (isRunning) playerSpeed *= 1.8;
-                if (isReloading) playerSpeed *= 0.6;
+                if (isReloading) playerSpeed = baseSpeed;
+                if (isRunning && isReloading) playerSpeed = baseSpeed;
 
                 if (moveState.forward || moveState.backward) velocity.z -= direction.z * playerSpeed * delta;
                 if (moveState.left || moveState.right) velocity.x -= direction.x * playerSpeed * delta;
