@@ -783,7 +783,7 @@
 
                 const uniqueZombies = [...new Set(zombies.map(z => z.userData.root))];
                 uniqueZombies.forEach(zombie => {
-                    const zombieBaseSpeed = 1.5;
+                    const zombieBaseSpeed = 2;
                     const zombieSpeed = zombieBaseSpeed + (wave - 1) * 0.2; 
                     
                     const directionToPlayer = new THREE.Vector3();
