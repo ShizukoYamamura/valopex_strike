@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Valopex Strike V3.2</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #000; user-select: none; }
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        #crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: rgba(0, 255, 0, 0.8); font-size: 24px; font-weight: bold; }
+        #hud { position: absolute; top: 20px; left: 20px; color: white; font-size: 24px; text-shadow: 2px 2px 4px #000; }
+        
+        #shop-screen {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(20, 20, 20, 0.95); color: white; padding: 30px; border-radius: 8px;
+            border: 1px solid #444; display: none; pointer-events: auto; min-width: 300px; text-align: center;
+        }
+        .shop-btn { background: #2c3e50; color: white; border: none; padding: 12px 20px; cursor: pointer; margin: 10px 0; width: 100%; font-size: 18px; border-radius: 4px; transition: background 0.2s; }
+        .shop-btn:hover { background: #34495e; }
+        
+        #start-screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); color: white; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; pointer-events: auto; z-index: 10;
+        }
+        #instructions { text-align: center; margin-top: 20px; color: #ccc; line-height: 1.6; }
+        
+        /* HP・弾薬バー */
+        .hud-bar-container { width: 200px; height: 10px; background: rgba(100, 100, 100, 0.5); border-radius: 5px; margin-top: 5px; }
+        .hud-bar { height: 100%; border-radius: 5px; transition: width 0.1s; }
+        #hp-bar { background: #e74c3c; width: 100%; }
+        #ammo-bar { background: #f1c40f; width: 100%; }
+    </style>
+</head>
+<body>
+    <div id="start-screen">
+        <h1 style="font-size: 48px; margin-bottom: 10px; color: #e74c3c;">Valopex Strike V3.2</h1>
+        <p style="font-size: 20px;" id="start-text">開始ボタンをクリックしてゲームスタート</p> <button id="start-button" class="shop-btn" style="width: auto; padding: 15px 30px; background: #e74c3c; font-family: inherit;">開始</button>
+        <div id="instructions">
+            移動: W A S D &nbsp;|&nbsp; 視点: マウス<br>
+            ジャンプ: SPACE &nbsp;|&nbsp; ダッシュ: LEFT SHIFT<br>
+            射撃: 左クリック（長押しで連射）&nbsp;|&nbsp; リロード: Rキー<br>
+            ショップ: Bキー
+        </div>
+        <div id="sensitivity-control" style="margin-top: 20px;">
+            <label for="sensitivity-slider" style="color: #ccc;">感度: <span id="sensitivity-value">1.0</span></label><br>
+            <input type="range" id="sensitivity-slider" min="0.1" max="5.0" step="0.1" value="1.0" style="width: 200px; pointer-events: auto;">
+        </div>
+    </div>
+
+    <div id="ui-layer">
+        <div id="crosshair">+</div>
+        <div id="hud">
+            <div>WAVE: <span id="wave-display" style="color: #e74c3c; font-weight: bold;">1</span></div>
+            <div style="color: #2ecc71;">MONEY: $<span id="money-display">0</span></div>
+            <div style="margin-top: 10px; font-size: 18px;">HP: <span id="hp-display">100</span> / 100</div>
+            <div class="hud-bar-container"><div id="hp-bar" class="hud-bar"></div></div>
+            <div style="margin-top: 10px; font-size: 18px;">AMMO: <span id="ammo-display">-- / --</span> <span id="reload-text" style="color: #e74c3c; font-weight: bold; display: none; margin-left: 10px;">RELOADING...</span></div>
+            <div class="hud-bar-container"><div id="ammo-bar" class="hud-bar"></div></div>
+            <div style="margin-top: 10px; font-size: 18px;">WEAPON: <span id="weapon-display">Pistol</span></div>
+        </div>
+        
+        <div id="shop-screen">
+            <h2 style="margin-top: 0; color: #f1c40f;">SHOP</h2>
+            <p>所持金: $<span id="shop-money-display">0</span></p>
+            <button class="shop-btn" onclick="buyWeapon('SMG', 500)">MAC-10 SMG ($500)</button>
+            <button class="shop-btn" onclick="buyWeapon('Assault Rifle', 1500)">AK-47 ($1500)</button>
+            <hr style="border-color: #444; margin: 20px 0;">
+            <button class="shop-btn" style="background: #e74c3c;" onclick="closeShop()">閉じる</button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
+
+    <script>
+        // --- Web Audio API (プロシージャルサウンド) ---
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioContext();
+
+        // 共通のノイズバッファを作成
+        const bufferSize = audioCtx.sampleRate * 1.0;
+        const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const output = noiseBuffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) output[i] = Math.random() * 2 - 1;
+
+        function playGunSound(type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
+            const noiseSource = audioCtx.createBufferSource();
+            noiseSource.buffer = noiseBuffer;
+
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'lowpass';
+
+            const gainNode = audioCtx.createGain();
+
+            noiseSource.connect(filter);
+            filter.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            let decay = 0.1;
+            if(type === 'Pistol') { filter.frequency.value = 1500; decay = 0.2; }
+            if(type === 'SMG') { filter.frequency.value = 2500; decay = 0.15; }
+            if(type === 'Assault Rifle') { filter.frequency.value = 1000; decay = 0.3; }
+
+            gainNode.gain.setValueAtTime(0.8, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + decay);
+
+            noiseSource.start();
+            noiseSource.stop(audioCtx.currentTime + decay);
+        }
+
+        // 金属的なリロード音 (プロシージャル)
+        function playReloadSound() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
+            // 機械的な「カチャ・カチャ」という2連続音
+            for (let i = 0; i < 2; i++) {
+                const noiseSource = audioCtx.createBufferSource();
+                noiseSource.buffer = noiseBuffer;
+
+                const filter = audioCtx.createBiquadFilter();
+                filter.type = 'bandpass'; // 金属的な響き
+                filter.frequency.value = 2000 + i * 500;
+                filter.Q.value = 5;
+
+                const gainNode = audioCtx.createGain();
+                noiseSource.connect(filter);
+                filter.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+
+                const startTime = audioCtx.currentTime + i * 0.15; // 0.15秒ずらす
+                const decay = 0.05;
+
+                gainNode.gain.setValueAtTime(0, startTime);
+                gainNode.gain.linearRampToValueAtTime(1.0, startTime + 0.005); // 素早いアタック
+                gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + decay);
+
+                noiseSource.start(startTime);
+                noiseSource.stop(startTime + decay);
+            }
+        }
+
+        // --- 感度調整に対応した MouseMoveControls ---
+        class MouseMoveControls {
+            constructor(camera, domElement) {
+                this.camera = camera;
+                this.domElement = domElement;
+                this.isLocked = false;
+                this.sensitivity = 1.0;
+                this._euler = new THREE.Euler(0, 0, 0, 'YXZ');
+                this._PI_2 = Math.PI / 2;
+
+                this._onMouseMove = this.onMouseMove.bind(this);
+                this._onPointerlockChange = this.onPointerlockChange.bind(this);
+                this._onPointerlockError = this.onPointerlockError.bind(this);
+
+                this.connect();
+            }
+
+            connect() {
+                document.addEventListener('mousemove', this._onMouseMove);
+                document.addEventListener('pointerlockchange', this._onPointerlockChange);
+                document.addEventListener('pointerlockerror', this._onPointerlockError);
+            }
+
+            disconnect() {
+                document.removeEventListener('mousemove', this._onMouseMove);
+                document.removeEventListener('pointerlockchange', this._onPointerlockChange);
+                document.removeEventListener('pointerlockerror', this._onPointerlockError);
+            }
+
+            onMouseMove(event) {
+                if (!this.isLocked) return;
+
+                const movementX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
+                const movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
+
+                this._euler.setFromQuaternion(this.camera.quaternion);
+
+                this._euler.y -= movementX * 0.002 * this.sensitivity;
+                this._euler.x -= movementY * 0.002 * this.sensitivity;
+
+                this._euler.x = Math.max(-this._PI_2, Math.min(this._PI_2, this._euler.x));
+
+                this.camera.quaternion.setFromEuler(this._euler);
+            }
+
+            onPointerlockChange() {
+                if (document.pointerLockElement === this.domElement) {
+                    this.isLocked = true;
+                    // 修正点: メニュー画面を確実に非表示にする
+                    document.getElementById('start-screen').style.display = 'none';
+                } else {
+                    this.isLocked = false;
+                    if (!isGameOver && !isShopOpen) document.getElementById('start-screen').style.display = 'flex';
+                }
+            }
+
+            onPointerlockError() {
+                console.error('PointerLockControls: Unable to use Pointer Lock API');
+            }
+
+            lock() {
+                this.domElement.requestPointerLock();
+            }
+
+            unlock() {
+                document.exitPointerLock();
+            }
+        }
+
+        // --- ゲーム変数の初期化 ---
+        let money = 0; let wave = 1; let zombiesToKill = 10; let currentWeapon = 'Pistol';
+        let zombies = []; let bullets = []; let isShopOpen = false;
+        let isReloading = false; let currentAmmo = 0; let reloadTimeout = null;
+
+        let playerHp = 100; let playerMaxHp = 100;
+        let isRunning = false; let isGameOver = false;
+
+        let bloodParticles = [];
+
+        // 武器のスペック（リロード設定）
+        const weapons = {
+            'Pistol': { isAuto: false, fireRate: 0, damage: 34, recoil: 0.1, magSize: 10, reloadTime: 1500, spreadFactor: 0.01 },
+            'SMG': { isAuto: true, fireRate: 80, damage: 20, recoil: 0.05, magSize: 30, reloadTime: 2000, spreadFactor: 0.008 },
+            'Assault Rifle': { isAuto: true, fireRate: 110, damage: 45, recoil: 0.15, magSize: 30, reloadTime: 2500, spreadFactor: 0.012 }
+        };
+
+        // --- Three.js セットアップ ---
+        const scene = new THREE.Scene();
+        const desertSand = 0xd2b48c; // Tan color
+        scene.background = new THREE.Color(desertSand);
+        scene.fog = new THREE.FogExp2(desertSand, 0.01); // 霧も砂色で
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.y = 1.6;
+        scene.add(camera);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4); // 環境光
+        scene.add(ambientLight);
+        
+        const sunLight = new THREE.DirectionalLight(0xffffcc, 1.0); // 黄色みがかった明るい太陽光
+        sunLight.position.set(50, 100, 20);
+        scene.add(sunLight);
+
+        const planeGeo = new THREE.PlaneGeometry(300, 300);
+        // 暗いグレーから砂色（テラコッタ）へ
+        const groundMat = new THREE.MeshStandardMaterial({ color: 0xc2a278, roughness: 1.0 });
+        const ground = new THREE.Mesh(planeGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        scene.add(ground);
+
+        const buildingGeo = new THREE.BoxGeometry(10, 15, 10); // 高さを抑える
+        // テラコッタ色の壁
+        const wallMat = new THREE.MeshStandardMaterial({ color: 0xd9b382, roughness: 0.9 });
+        
+        // Crate（木箱）のモデリング（dust2の象徴）
+        const crateGeo = new THREE.BoxGeometry(3, 3, 3);
+        // 茶色の木箱
+        const crateMat = new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 1.0 });
+
+        // ドラム缶
+        const drumGeo = new THREE.CylinderGeometry(1, 1, 3, 16);
+        const drumMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.7, roughness: 0.3 }); // 暗い金属
+
+        // Dust2アーチ（ブロックで組む）
+        const archPillarGeo = new THREE.BoxGeometry(2, 10, 2);
+        const archTopGeo = new THREE.BoxGeometry(12, 2, 2);
+
+        for(let i = 0; i < 40; i++) {
+            // 建物を配置
+            const building = new THREE.Mesh(buildingGeo, wallMat);
+            building.geometry = buildingGeo.clone();
+            building.scale.y = 0.5 + Math.random() * 1.0; 
+            building.geometry.computeBoundingBox(); // スケール後の高さを反映
+
+            const bx = (Math.random() - 0.5) * 150;
+            const bz = (Math.random() - 0.5) * 150;
+            building.position.set(bx, (building.scale.y * buildingGeo.parameters.height) / 2, bz);
+
+            if (building.position.distanceTo(new THREE.Vector3(0, 0, 0)) > 25) {
+                scene.add(building);
+            }
+
+            // 木箱を配置
+            if (i % 2 === 0) {
+                const cx = (Math.random() - 0.5) * 130;
+                const cz = (Math.random() - 0.5) * 130;
+                
+                const stackHeight = Math.random() > 0.5 ? 2 : 1;
+                for(let j=0; j<stackHeight; j++) {
+                    const crate = new THREE.Mesh(crateGeo, crateMat);
+                    crate.position.set(cx + (Math.random() - 0.5)*2, 1.5 + j*3, cz + (Math.random() - 0.5)*2);
+                    if (crate.position.distanceTo(new THREE.Vector3(0, 0, 0)) > 20) {
+                        scene.add(crate);
+                    }
+                }
+            }
+            // ドラム缶を配置
+            if (i % 3 === 0) {
+                const drum = new THREE.Mesh(drumGeo, drumMat);
+                const dx = (Math.random() - 0.5) * 140;
+                const dz = (Math.random() - 0.5) * 140;
+                drum.position.set(dx, 1.5, dz); // 地面に設置
+                if (drum.position.distanceTo(new THREE.Vector3(0, 0, 0)) > 20) {
+                    scene.add(drum);
+                }
+            }
+            // アーチを配置
+            if (i % 8 === 0) {
+                const archGroup = new THREE.Group();
+                const pillar1 = new THREE.Mesh(archPillarGeo, wallMat);
+                pillar1.position.set(-5, 5, 0);
+                const pillar2 = new THREE.Mesh(archPillarGeo, wallMat);
+                pillar2.position.set(5, 5, 0);
+                const top = new THREE.Mesh(archTopGeo, wallMat);
+                top.position.set(0, 11, 0);
+                archGroup.add(pillar1, pillar2, top);
+
+                const ax = (Math.random() - 0.5) * 120;
+                const az = (Math.random() - 0.5) * 120;
+                archGroup.position.set(ax, 0, az);
+                archGroup.rotation.y = Math.random() * Math.PI;
+                if (archGroup.position.distanceTo(new THREE.Vector3(0, 0, 0)) > 25) {
+                    scene.add(archGroup);
+                }
+            }
+        }
+
+        const gunGroup = new THREE.Group();
+        gunGroup.position.set(0.3, -0.25, -0.5);
+        gunGroup.userData = { originalPosition: gunGroup.position.clone() }; // 元の姿勢を保存
+        camera.add(gunGroup);
+
+        const muzzleLight = new THREE.PointLight(0xffaa00, 0, 5);
+        gunGroup.add(muzzleLight);
+
+        const gunMats = {
+            metal: new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.8, roughness: 0.2 }),
+            darkMetal: new THREE.MeshStandardMaterial({ color: 0x1a1a1a, metalness: 0.9, roughness: 0.3 }),
+            wood: new THREE.MeshStandardMaterial({ color: 0x5c3a21, roughness: 0.9 })
+        };
+
+        function updateWeaponModel() {
+            for(let i = gunGroup.children.length - 1; i >= 0; i--) {
+                if(gunGroup.children[i].type !== 'PointLight') gunGroup.remove(gunGroup.children[i]);
+            }
+
+            if (currentWeapon === 'Pistol') {
+                const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.4), gunMats.metal);
+                barrel.position.set(0, 0, -0.1);
+                const grip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.2, 0.1), gunMats.metal);
+                grip.position.set(0, -0.1, 0.05);
+                grip.rotation.x = 0.2;
+                gunGroup.add(barrel, grip);
+                muzzleLight.position.set(0, 0, -0.3);
+            } 
+            else if (currentWeapon === 'SMG') {
+                const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.18, 0.35), gunMats.darkMetal);
+                receiver.position.set(0, 0, -0.05);
+                const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.15), gunMats.darkMetal);
+                barrel.rotation.x = Math.PI / 2;
+                barrel.position.set(0, 0.05, -0.25);
+                const mag = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.25, 0.1), gunMats.darkMetal);
+                mag.position.set(0, -0.15, -0.05);
+                gunGroup.add(receiver, barrel, mag);
+                muzzleLight.position.set(0, 0.05, -0.35);
+            } 
+            else if (currentWeapon === 'Assault Rifle') {
+                const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.15, 0.4), gunMats.darkMetal);
+                receiver.position.set(0, 0, -0.1);
+                const stock = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.15, 0.3), gunMats.wood);
+                stock.position.set(0, -0.05, 0.25);
+                stock.rotation.x = -0.1;
+                const handguard = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.1, 0.25), gunMats.wood);
+                handguard.position.set(0, 0, -0.3);
+                const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.4), gunMats.darkMetal);
+                barrel.rotation.x = Math.PI / 2;
+                barrel.position.set(0, 0.02, -0.5);
+                const mag = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, 0.12), gunMats.darkMetal);
+                mag.position.set(0, -0.15, -0.2);
+                mag.rotation.x = 0.2;
+                const grip = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.15, 0.08), gunMats.wood);
+                grip.position.set(0, -0.12, 0);
+                grip.rotation.x = 0.2;
+                gunGroup.add(receiver, stock, handguard, barrel, mag, grip);
+                muzzleLight.position.set(0, 0.02, -0.75);
+            }
+        }
+        updateWeaponModel();
+
+        // --- バイオ2風 ゾンビテクスチャ ---
+        function createZombieTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256; canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#8f9f8f'; ctx.fillRect(0, 0, 256, 256);
+            for(let i = 0; i < 50; i++) {
+                ctx.fillStyle = Math.random() > 0.3 ? '#500000' : '#222';
+                ctx.beginPath();
+                ctx.arc(Math.random()*256, Math.random()*256, Math.random()*15, 0, Math.PI*2);
+                ctx.fill();
+            }
+            ctx.fillStyle = '#111';
+            ctx.fillRect(60, 60, 40, 30); ctx.fillRect(156, 60, 40, 30);
+            ctx.fillStyle = '#600000';
+            ctx.fillRect(80, 160, 96, 40);
+            return new THREE.CanvasTexture(canvas);
+        }
+        const zombieMat = new THREE.MeshStandardMaterial({ map: createZombieTexture(), roughness: 1.0 });
+
+        function spawnZombies(count) {
+            const zombieHp = 100 + (wave - 1) * 25;
+            for (let i = 0; i < count; i++) {
+                const zombieGroup = new THREE.Group();
+                const body = new THREE.Mesh(new THREE.BoxGeometry(1, 1.4, 0.5), zombieMat);
+                body.position.y = 0.7;
+                const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), zombieMat);
+                head.position.y = 1.7;
+                zombieGroup.add(body, head);
+
+                const angle = Math.random() * Math.PI * 2;
+                const radius = 25 + Math.random() * 20;
+                zombieGroup.position.set(Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
+                scene.add(zombieGroup);
+                
+                zombieGroup.userData = { isZombie: true, root: zombieGroup, hp: zombieHp };
+                body.userData = zombieGroup.userData; head.userData = zombieGroup.userData;
+                zombies.push(body, head); 
+            }
+        }
+        spawnZombies(zombiesToKill);
+
+        function createBloodParticleTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 32; canvas.height = 32;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#8a0303';
+            ctx.beginPath();
+            ctx.arc(16, 16, 14, 0, Math.PI * 2);
+            ctx.fill();
+            return new THREE.CanvasTexture(canvas);
+        }
+        const bloodTexture = createBloodParticleTexture();
+        const bloodMat = new THREE.SpriteMaterial({ map: bloodTexture, color: 0xffffff, transparent: true, opacity: 1.0 });
+
+        // --- コントローラー＆ジャンプ ---
+        // 修正: 復元したベースコードの PointerLockControls を感度調整付きコントロールに置き換え
+        const controls = new MouseMoveControls(camera, document.body);
+        
+        // 修正: 開始ボタンのクリックイベントを設定
+        document.getElementById('start-button').addEventListener('click', () => {
+            if (isGameOver) { restartGame(); return; }
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            controls.lock(); //Ninejsの controls.lock()
+        });
+
+        const velocity = new THREE.Vector3();
+        const direction = new THREE.Vector3();
+        let moveState = { forward: false, backward: false, left: false, right: false };
+        let canJump = false;
+        let prevTime = performance.now();
+
+        let isMouseDown = false;
+        let lastShootTime = 0;
+
+        document.addEventListener('keydown', (e) => {
+            if(e.code === 'KeyW') moveState.forward = true;
+            if(e.code === 'KeyS') moveState.backward = true;
+            if(e.code === 'KeyA') moveState.left = true;
+            if(e.code === 'KeyD') moveState.right = true;
+            if(e.code === 'KeyB') toggleShop();
+            if(e.code === 'KeyR') reload();
+            if(e.code === 'ShiftLeft') isRunning = true;
+            if(e.code === 'Space' && canJump && controls.isLocked && !isShopOpen) { velocity.y += 12; canJump = false; }
+        });
+        document.addEventListener('keyup', (e) => {
+            if(e.code === 'KeyW') moveState.forward = false;
+            if(e.code === 'KeyS') moveState.backward = false;
+            if(e.code === 'KeyA') moveState.left = false;
+            if(e.code === 'KeyD') moveState.right = false;
+            if(e.code === 'ShiftLeft') isRunning = false;
+        });
+
+        // 追加機能: 感度調整UIの制御
+        const sensitivitySlider = document.getElementById('sensitivity-slider');
+        const sensitivityValueDisplay = document.getElementById('sensitivity-value');
+
+        // スライダー変更イベント
+        sensitivitySlider.addEventListener('input', () => {
+            controls.sensitivity = parseFloat(sensitivitySlider.value);
+            sensitivityValueDisplay.innerText = controls.sensitivity.toFixed(1);
+        });
+
+        const raycaster = new THREE.Raycaster();
+        const ammoDisplay = document.getElementById('ammo-display');
+        const ammoBar = document.getElementById('ammo-bar');
+        const reloadText = document.getElementById('reload-text');
+
+        function updateAmmoUI() {
+            const spec = weapons[currentWeapon];
+            ammoDisplay.innerText = currentAmmo + " / " + spec.magSize;
+            ammoBar.style.width = (currentAmmo / spec.magSize * 100) + "%";
+        }
+
+        currentAmmo = weapons[currentWeapon].magSize; // 初期弾薬を設定
+        updateAmmoUI();
+
+        function reload() {
+            const spec = weapons[currentWeapon];
+            if (isReloading || isShopOpen || currentAmmo === spec.magSize || !controls.isLocked) return;
+
+            // リロード音を再生
+            playReloadSound();
+
+            isReloading = true;
+            reloadText.style.display = 'inline';
+            gunGroup.position.z += 0.1; // リロードモーション（仮）
+
+            reloadTimeout = setTimeout(() => {
+                currentAmmo = spec.magSize;
+                updateAmmoUI();
+                isReloading = false;
+                reloadText.style.display = 'none';
+                gunGroup.position.z -= 0.1; // 戻す
+            }, spec.reloadTime);
+        }
+        
+        function shoot() {
+            if (!controls.isLocked || isShopOpen || isReloading || currentAmmo <= 0) return;
+
+            const weaponSpec = weapons[currentWeapon];
+            currentAmmo--;
+            updateAmmoUI();
+            playGunSound(currentWeapon);
+
+            if (currentAmmo <= 0) reload(); // 弾切れで自動リロード
+
+            muzzleLight.intensity = 2;
+            gunGroup.position.z += weaponSpec.recoil; 
+            gunGroup.rotation.x += weaponSpec.recoil * 1.5;
+            
+            setTimeout(() => { muzzleLight.intensity = 0; }, 40);
+
+            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+            
+            const moveSpeed = new THREE.Vector3(velocity.x, 0, velocity.z).length();
+            let spread = weaponSpec.spreadFactor * (1 + moveSpeed * 0.1);
+            if (isRunning) spread *= 2.5; // ダッシュ中は大幅にばらける
+
+            const offset = new THREE.Vector3(
+                (Math.random() - 0.5) * spread,
+                (Math.random() - 0.5) * spread,
+                (Math.random() - 0.5) * spread
+            );
+            raycaster.ray.direction.add(offset).normalize();
+
+            const gunTipPos = new THREE.Vector3();
+            muzzleLight.getWorldPosition(gunTipPos);
+
+            let hitPoint = raycaster.ray.at(50, new THREE.Vector3()); // デフォルトの着弾点（ばらけた方向）
+            const intersects = raycaster.intersectObjects(zombies);
+            
+            if (intersects.length > 0) {
+                hitPoint = intersects[0].point; // ゾンビにヒットした着弾点
+                const hitObject = intersects[0].object;
+                const rootZombie = hitObject.userData.root;
+                
+                if(rootZombie && scene.children.includes(rootZombie)) {
+                    rootZombie.userData.hp -= weaponSpec.damage;
+                    
+                    spawnBloodEffect(hitPoint);
+
+                    if (rootZombie.userData.hp <= 0) {
+                        scene.remove(rootZombie);
+                        zombies = zombies.filter(z => z.userData.root !== rootZombie);
+                        money += 100;
+                        document.getElementById('money-display').innerText = money;
+
+                        if (zombies.length === 0) {
+                            wave++;
+                            document.getElementById('wave-display').innerText = wave;
+                            zombiesToKill += 3;
+                            setTimeout(() => spawnZombies(zombiesToKill), 2000);
+                        }
+                    }
+                }
+            }
+
+            const bulletGeo = new THREE.BufferGeometry().setFromPoints([gunTipPos, hitPoint]);
+            const bulletMat = new THREE.LineBasicMaterial({ color: 0xffffaa, transparent: true, opacity: 1, linewidth: (currentWeapon === 'Assault Rifle' ? 2 : 1) });
+            const bulletLine = new THREE.Line(bulletGeo, bulletMat);
+            scene.add(bulletLine);
+            bullets.push({ mesh: bulletLine, life: 1.0 });
+        }
+
+        function spawnBloodEffect(point) {
+            const particleCount = 6;
+            for (let i = 0; i < particleCount; i++) {
+                const particle = new THREE.Sprite(bloodMat.clone());
+                particle.position.copy(point);
+                const scale = 0.05 + Math.random() * 0.1;
+                particle.scale.set(scale, scale, scale);
+                scene.add(particle);
+
+                const speed = 2 + Math.random() * 3;
+                const velocity = new THREE.Vector3(
+                    (Math.random() - 0.5),
+                    (Math.random() - 0.2), // やや上向き
+                    (Math.random() - 0.5)
+                ).normalize().multiplyScalar(speed * 0.016); // 1フレームあたりの移動量に調整
+
+                bloodParticles.push({
+                    sprite: particle,
+                    velocity: velocity,
+                    life: 1.0, // 寿命（秒）
+                    gravity: -0.01 // 重力
+                });
+            }
+        }
+
+        document.addEventListener('mousedown', (e) => { 
+            if (e.button === 0 && controls.isLocked && !isShopOpen) {
+                isMouseDown = true;
+                if (!weapons[currentWeapon].isAuto) shoot();
+            }
+        });
+        document.addEventListener('mouseup', (e) => { if (e.button === 0) isMouseDown = false; });
+
+        // --- ショップシステム・ゲームオーバー・リスタート ---
+        function toggleShop() {
+            if (isShopOpen) closeShop();
+            else {
+                if (isReloading || isGameOver) return;
+                isMouseDown = false;
+                controls.unlock(); isShopOpen = true;
+                document.getElementById('shop-screen').style.display = 'block';
+                document.getElementById('start-screen').style.display = 'none';
+                document.getElementById('shop-money-display').innerText = money;
+            }
+        }
+        window.buyWeapon = function(name, price) {
+            if (money >= price) {
+                money -= price;
+                document.getElementById('money-display').innerText = money;
+                document.getElementById('shop-money-display').innerText = money;
+                currentWeapon = name;
+                document.getElementById('weapon-display').innerText = currentWeapon;
+                updateWeaponModel();
+                currentAmmo = weapons[currentWeapon].magSize; // 武器変更時に弾薬を満タンに
+                updateAmmoUI();
+            }
+        }
+        window.closeShop = function() {
+            isShopOpen = false;
+            document.getElementById('shop-screen').style.display = 'none';
+            controls.lock();
+        }
+
+        const hpDisplay = document.getElementById('hp-display');
+        const hpBar = document.getElementById('hp-bar');
+
+        function updatePlayerHP(amount) {
+            if (isGameOver) return;
+            playerHp += amount;
+            if (playerHp > playerMaxHp) playerHp = playerMaxHp;
+            if (playerHp <= 0) {
+                playerHp = 0;
+                gameOver();
+            }
+            hpDisplay.innerText = Math.floor(playerHp); // 小数点以下を切り捨てて表示
+            hpBar.style.width = (playerHp / playerMaxHp * 100) + "%";
+        }
+
+        function gameOver() {
+            isGameOver = true;
+            controls.unlock();
+            const startScreen = document.getElementById('start-screen');
+            startScreen.style.display = 'flex';
+            document.getElementById('start-text').innerText = "GAME OVER";
+            startScreen.style.backgroundColor = "rgba(100, 0, 0, 0.9)";
+            clearTimeout(reloadTimeout);
+            isReloading = false;
+            reloadText.style.display = 'none';
+        }
+
+        function restartGame() {
+            location.reload(); // ページをリロードしてゲームを初期化
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // --- メインループ ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const time = performance.now();
+            const delta = (time - prevTime) / 1000;
+
+            if (isMouseDown && weapons[currentWeapon].isAuto && controls.isLocked && !isReloading) {
+                if (time - lastShootTime > weapons[currentWeapon].fireRate) {
+                    shoot();
+                    lastShootTime = time;
+                }
+            }
+
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                bullets[i].life -= delta * 15;
+                if (bullets[i].life <= 0) {
+                    scene.remove(bullets[i].mesh);
+                    bullets.splice(i, 1);
+                } else {
+                    bullets[i].mesh.material.opacity = bullets[i].life;
+                }
+            }
+
+            for (let i = bloodParticles.length - 1; i >= 0; i--) {
+                const p = bloodParticles[i];
+                p.life -= delta; // 寿命を減らす
+
+                if (p.life <= 0) {
+                    scene.remove(p.sprite);
+                    bloodParticles.splice(i, 1);
+                } else {
+                    p.velocity.y += p.gravity * delta * 60; // フレームレート補正
+                    p.sprite.position.add(p.velocity);
+                    p.sprite.material.opacity = p.life;
+                }
+            }
+
+            // 反動リカバー (復元したベースコードのLERP)
+            if (!isReloading) {
+                gunGroup.position.x = THREE.MathUtils.lerp(gunGroup.position.x, gunGroup.userData.originalPosition.x, 0.1);
+                gunGroup.position.y = THREE.MathUtils.lerp(gunGroup.position.y, gunGroup.userData.originalPosition.y, 0.1);
+                gunGroup.position.z = THREE.MathUtils.lerp(gunGroup.position.z, gunGroup.userData.originalPosition.z, 0.1);
+                gunGroup.rotation.x = THREE.MathUtils.lerp(gunGroup.rotation.x, 0, 0.1);
+            }
+
+            if (controls.isLocked && !isGameOver) {
+                // 復元したベースコードの物理・移動ロジック
+                velocity.y -= 30.0 * delta; 
+                velocity.x -= velocity.x * 10.0 * delta;
+                velocity.z -= velocity.z * 10.0 * delta;
+
+                direction.z = Number(moveState.forward) - Number(moveState.backward);
+                // 修正点: Aキーで左に移動するように、direction.x の計算を逆にする
+                // 復元前: direction.x = Number(moveState.right) - Number(moveState.left); // D-A -> 右が正、左が負
+                direction.x = Number(moveState.left) - Number(moveState.right); // A-D -> 左が正、右が負
+                direction.normalize(); 
+
+                // 速度設定（ダッシュ時は速く）
+                const baseSpeed = 40.0;
+                let playerSpeed = baseSpeed;
+                if (isRunning) playerSpeed *= 1.8;
+
+                if (moveState.forward || moveState.backward) velocity.z -= direction.z * playerSpeed * delta;
+                if (moveState.left || moveState.right) velocity.x -= direction.x * playerSpeed * delta;
+
+                // 修正: MouseMoveControls の moveRight/moveForward を使用
+                // direction.x の計算を逆にしたので、moveRight への適用方法も調整
+                // Aキー(left=true) -> dir.x=1 -> vel.x-=1*spd -> vel.xは負
+                // negative vel.x to moveRight moves left relative to camera.
+                // controls.moveRight(-velocity.x * delta); // 復元前
+                controls.camera.translateX(velocity.x * delta); // 直接カメラを動かす（左キーで負のtranslateXは左移動）
+                controls.camera.translateZ(velocity.z * delta);
+                controls.camera.position.y += velocity.y * delta;
+
+                if (camera.position.y < 1.6) {
+                    velocity.y = 0; camera.position.y = 1.6; canJump = true;
+                }
+
+                const uniqueZombies = [...new Set(zombies.map(z => z.userData.root))];
+                uniqueZombies.forEach(zombie => {
+                    const zombieBaseSpeed = 1.5;
+                    const zombieSpeed = zombieBaseSpeed + (wave - 1) * 0.2; 
+                    
+                    const directionToPlayer = new THREE.Vector3();
+                    directionToPlayer.subVectors(camera.position, zombie.position);
+                    
+                    const distance = directionToPlayer.length();
+                    if (distance < 1.8) { // ゾンビの攻撃範囲（接触）
+                        updatePlayerHP(-20 * delta); 
+                    }
+
+                    directionToPlayer.y = 0; 
+                    directionToPlayer.normalize();
+                    zombie.position.addScaledVector(directionToPlayer, zombieSpeed * delta);
+                    zombie.lookAt(camera.position.x, zombie.position.y, camera.position.z);
+                });
+            }
+
+            renderer.render(scene, camera);
+            prevTime = time;
+        }
+
+        animate();
+    </script>
+</body>
+</html>
