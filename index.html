@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Valopex Strike - Mansion Update</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #000; user-select: none; }
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
@@ -16,13 +17,17 @@
             border: 1px solid #444; display: none; pointer-events: auto; min-width: 300px; text-align: center;
         }
         .shop-btn { background: #2c3e50; color: white; border: none; padding: 12px 20px; cursor: pointer; margin: 10px 0; width: 100%; font-size: 18px; border-radius: 4px; transition: background 0.2s; }
-        .shop-btn:hover { background: #34495e; }
+        .shop-btn:hover:not(:disabled) { background: #34495e; }
+        .shop-btn:disabled { background: #555 !important; cursor: not-allowed; opacity: 0.7; }
         
-        #start-screen {
+        #start-screen, #game-over-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.9); color: #8a0303; display: flex; flex-direction: column;
+            display: flex; flex-direction: column;
             align-items: center; justify-content: center; pointer-events: auto; z-index: 10;
         }
+        #start-screen { background: rgba(0,0,0,0.9); color: #8a0303; }
+        #game-over-screen { background: rgba(100,0,0,0.9); color: white; display: none; }
+        
         #instructions { text-align: center; margin-top: 20px; color: #aaa; line-height: 1.6; }
         .dev-command { color: #f39c12; font-size: 14px; margin-top: 15px; border-top: 1px solid #333; padding-top: 10px;}
         
@@ -38,12 +43,24 @@
             background: radial-gradient(circle, rgba(255,0,0,0) 40%, rgba(255,0,0,0.3) 100%);
             opacity: 0; transition: opacity 0.2s; pointer-events: none;
         }
+
+        /* ランキングUI用 */
+        #leaderboard-box { margin-top: 20px; background: rgba(0,0,0,0.7); padding: 15px; border-radius: 8px; width: 320px; text-align: center; max-height: 300px; overflow-y: auto; }
+        #leaderboard-box h3 { margin: 0 0 10px 0; color: #f1c40f; }
+        #leaderboard-list { list-style: none; padding: 0; margin: 0; text-align: left; }
+        #leaderboard-list li { display: flex; justify-content: space-between; font-size: 16px; margin-bottom: 5px; border-bottom: 1px solid #444; padding-bottom: 5px; }
+        
+        /* スクロールバーの装飾 */
+        #leaderboard-box::-webkit-scrollbar { width: 8px; }
+        #leaderboard-box::-webkit-scrollbar-track { background: #222; border-radius: 4px; }
+        #leaderboard-box::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+        #leaderboard-box::-webkit-scrollbar-thumb:hover { background: #777; }
     </style>
 </head>
 <body>
     <div id="start-screen">
         <h1 style="font-size: 56px; margin-bottom: 10px; font-family: serif;">RESIDENT STRIKE</h1>
-        <p style="font-size: 20px; color: white;" id="start-text">開始ボタンをクリックしてゲームスタート</p> 
+        <p style="font-size: 20px; color: white;">開始ボタンをクリックしてゲームスタート</p> 
         <button id="start-button" class="shop-btn" style="width: auto; padding: 15px 40px; background: #8a0303; font-family: inherit; font-weight: bold;">開始</button>
         <div id="instructions">
             移動: W A S D &nbsp;|&nbsp; 視点: マウス<br>
@@ -57,11 +74,32 @@
         </div>
     </div>
 
+    <div id="game-over-screen">
+        <h1 style="font-size: 64px; margin-bottom: 10px; font-family: serif;">YOU DIED</h1>
+        <h2 style="font-size: 32px; color: #f1c40f; margin-bottom: 20px;">FINAL SCORE: <span id="final-score-display">0</span></h2>
+        
+        <div>
+            <input type="text" id="nickname-input" placeholder="Nickname (Max 10)" maxlength="10" style="padding: 10px; font-size: 18px; border-radius: 4px; border: none; outline: none; text-align: center;">
+            <button id="submit-score-btn" onclick="submitScore()" class="shop-btn" style="width: auto; padding: 10px 20px; margin-left: 10px; background: #27ae60;">ランキングに登録</button>
+        </div>
+
+        <div id="leaderboard-box">
+            <h3>GLOBAL RANKING</h3>
+            <ul id="leaderboard-list">
+                <li>読み込み中...</li>
+            </ul>
+            <button id="load-more-btn" onclick="fetchMoreLeaderboard()" class="shop-btn" style="display: none; padding: 5px 15px; margin-top: 10px; font-size: 14px;">更に表示</button>
+        </div>
+
+        <button onclick="restartGame()" class="shop-btn" style="width: auto; padding: 10px 30px; margin-top: 30px; background: #555;">もう一度プレイ</button>
+    </div>
+
     <div id="ui-layer">
         <div id="damage-overlay"></div>
         <div id="crosshair">+</div>
         <div id="hud">
             <div>WAVE: <span id="wave-display" style="color: #e74c3c; font-weight: bold;">1</span></div>
+            <div>SCORE: <span id="score-display" style="color: #f1c40f; font-weight: bold;">0</span></div>
             <div style="color: #2ecc71;">MONEY: $<span id="money-display">0</span></div>
             <div style="margin-top: 10px; font-size: 18px;">HP: <span id="hp-display">100</span> / 100</div>
             <div class="hud-bar-container"><div id="hp-bar" class="hud-bar"></div></div>
@@ -83,6 +121,12 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
     <script>
+        // --- Supabase 初期化 ---
+        // ※以下のURLとKEYを自分のSupabaseプロジェクトのものに書き換えてください
+        const SUPABASE_URL = 'https://wruyddcigpisuqeorems.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndydXlkZGNpZ3Bpc3VxZW9yZW1zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExODM2MzcsImV4cCI6MjA5Njc1OTYzN30.qEZg0bMMg0LLxNKXE4O94nnhe_2URTDlEG3YMxxpGT0';
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
         // --- Web Audio API (プロシージャルサウンド) ---
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         const audioCtx = new AudioContext();
@@ -143,22 +187,17 @@
             if (audioCtx.state === 'suspended') audioCtx.resume();
             const t = audioCtx.currentTime;
 
-            // 1. 声帯の震えをノコギリ波（sawtooth）でシミュレート
             const osc = audioCtx.createOscillator();
             osc.type = 'sawtooth';
-            // ピッチ（音程）を少し高めから低く唸るように下げる（力む感じ）
             osc.frequency.setValueAtTime(160, t);
             osc.frequency.exponentialRampToValueAtTime(80, t + 0.5);
 
-            // 2. 口の形（フォルマント）の変化をバンドパスフィルターで作る
             const formantFilter = audioCtx.createBiquadFilter();
             formantFilter.type = 'bandpass';
-            formantFilter.Q.value = 4.0; // 響き（クセ）を強くする
-            // 「オ」の周波数(約400Hz)から「エ」の周波数(約1500Hz)へ変化させる
+            formantFilter.Q.value = 4.0;
             formantFilter.frequency.setValueAtTime(400, t);
             formantFilter.frequency.exponentialRampToValueAtTime(1500, t + 0.3);
 
-            // 3. 吐瀉物の水っぽさ（元のノイズ）も少し混ぜて生々しくする
             const noiseSource = audioCtx.createBufferSource();
             noiseSource.buffer = noiseBuffer;
             const noiseFilter = audioCtx.createBiquadFilter();
@@ -169,20 +208,17 @@
             noiseGain.gain.exponentialRampToValueAtTime(0.01, t + 0.4);
             noiseSource.connect(noiseFilter).connect(noiseGain);
 
-            // 4. 音量の動き（「オッ」で一瞬止まって「エェッ」と吐き出す動き）
             const mainGain = audioCtx.createGain();
             mainGain.gain.setValueAtTime(0, t);
-            mainGain.gain.linearRampToValueAtTime(1.2, t + 0.05);      // 「オッ」
-            mainGain.gain.exponentialRampToValueAtTime(0.2, t + 0.15); // 一瞬のタメ（えづき）
-            mainGain.gain.linearRampToValueAtTime(1.5, t + 0.25);      // 「エッ！」
-            mainGain.gain.exponentialRampToValueAtTime(0.01, t + 0.6); // 余韻
+            mainGain.gain.linearRampToValueAtTime(1.2, t + 0.05);
+            mainGain.gain.exponentialRampToValueAtTime(0.2, t + 0.15);
+            mainGain.gain.linearRampToValueAtTime(1.5, t + 0.25);
+            mainGain.gain.exponentialRampToValueAtTime(0.01, t + 0.6);
 
-            // 全てを接続して出力
             osc.connect(formantFilter).connect(mainGain);
             noiseGain.connect(mainGain);
             mainGain.connect(audioCtx.destination);
 
-            // 再生 (0.6秒間)
             osc.start(t);
             osc.stop(t + 0.6);
             noiseSource.start(t);
@@ -220,6 +256,7 @@
                 if (document.pointerLockElement === this.domElement) {
                     this.isLocked = true;
                     document.getElementById('start-screen').style.display = 'none';
+                    document.getElementById('game-over-screen').style.display = 'none';
                 } else {
                     this.isLocked = false;
                     if (!isGameOver && !isShopOpen) document.getElementById('start-screen').style.display = 'flex';
@@ -230,6 +267,7 @@
         }
 
         // --- ゲーム変数の初期化 ---
+        let score = 0;
         let money = 0; let wave = 1; let zombiesToKill = 5; let currentWeapon = 'Pistol';
         let zombies = []; let bullets = []; let vomits = []; let isShopOpen = false;
         let isReloading = false; let currentAmmo = 0; let reloadTimeout = null;
@@ -237,9 +275,8 @@
         let isRunning = false; let isGameOver = false;
         let bloodParticles = [];
 
-        // 障害物の管理配列
-        let obstacles = []; // 物理判定用
-        let obstacleMeshes = []; // 射撃判定用
+        let obstacles = [];
+        let obstacleMeshes = [];
 
         const weapons = {
             'Pistol': { isAuto: false, fireRate: 0, damage: 34, recoil: 0.1, magSize: 10, reloadTime: 1500, spreadFactor: 0.01 },
@@ -247,7 +284,7 @@
             'Assault Rifle': { isAuto: true, fireRate: 110, damage: 45, recoil: 0.15, magSize: 30, reloadTime: 2500, spreadFactor: 0.012 }
         };
 
-        // --- Three.js セットアップ (Spencer Mansion風) ---
+        // --- Three.js セットアップ ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x020202);
         scene.fog = new THREE.FogExp2(0x000000, 0.03); 
@@ -260,13 +297,11 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // 照明を少し明るく調整
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.2); 
         scene.add(ambientLight);
 
-        // マップ設定 
         const mapSize = 60;
-        const mapLimit = mapSize / 2; // 30
+        const mapLimit = mapSize / 2;
         const roomHeight = 12;
 
         const floorGeo = new THREE.PlaneGeometry(mapSize, mapSize);
@@ -297,7 +332,6 @@
         wallWest.position.set(-mapLimit - wallThickness / 2, roomHeight / 2, 0);
         scene.add(wallNorth, wallSouth, wallEast, wallWest);
 
-        // 柱と照明、オブジェクトの配置
         const pillarGeo = new THREE.BoxGeometry(2, roomHeight, 2);
         const pillarMat = new THREE.MeshStandardMaterial({ color: 0x2a1610, roughness: 0.8 });
 
@@ -308,33 +342,28 @@
                 pillar.position.set(x, roomHeight / 2, z);
                 scene.add(pillar);
                 
-                // 柱を障害物として登録（当たり判定の半径1.5）
                 obstacles.push({ mesh: pillar, radius: 1.5 });
                 obstacleMeshes.push(pillar);
 
-                // 照明の強度と範囲を少し広く
                 const light = new THREE.PointLight(0xffaa00, 1.2, 30);
                 light.position.set(x, roomHeight - 2, z);
                 scene.add(light);
             }
         }
 
-        // マップを彩る木箱オブジェクトを追加
         const crateGeo = new THREE.BoxGeometry(4, 4, 4);
         const crateMat = new THREE.MeshStandardMaterial({ color: 0x4a2e15, roughness: 1.0 });
         for(let i=0; i<10; i++) {
             const crate = new THREE.Mesh(crateGeo, crateMat);
             crate.position.set((Math.random() - 0.5) * 50, 2, (Math.random() - 0.5) * 50);
             
-            // 中央（プレイヤー初期位置）付近は避ける
             if(crate.position.distanceTo(new THREE.Vector3(0,0,0)) > 8) {
                 scene.add(crate);
-                obstacles.push({ mesh: crate, radius: 2.5 }); // 当たり判定の半径2.5
+                obstacles.push({ mesh: crate, radius: 2.5 }); 
                 obstacleMeshes.push(crate);
             }
         }
 
-        // 武器モデル
         const gunGroup = new THREE.Group();
         gunGroup.position.set(0.3, -0.25, -0.5);
         gunGroup.userData = { originalPosition: gunGroup.position.clone() }; 
@@ -430,7 +459,6 @@
                 zombieGroup.position.set(spawnX, 0, spawnZ);
                 scene.add(zombieGroup);
                 
-                // 次のゲロタイミングを 0〜30秒の間でバラバラに設定
                 const randomVomitDelay = Math.random() * 30000;
                 
                 zombieGroup.userData = { 
@@ -493,7 +521,7 @@
                 const uniqueZombies = [...new Set(zombies.map(z => z.userData.root))];
                 uniqueZombies.forEach(z => scene.remove(z));
                 zombies = [];
-                updatePlayerHP(50); // ウェーブスキップ時にもHP回復
+                updatePlayerHP(50); 
                 wave++;
                 document.getElementById('wave-display').innerText = wave;
                 zombiesToKill += 3;
@@ -569,7 +597,6 @@
 
             let hitPoint = raycaster.ray.at(50, new THREE.Vector3()); 
             
-            // ゾンビだけでなく、障害物も射撃判定の対象にする
             const shootables = [...zombies, ...obstacleMeshes];
             const intersects = raycaster.intersectObjects(shootables);
             
@@ -577,7 +604,6 @@
                 hitPoint = intersects[0].point; 
                 const hitObject = intersects[0].object;
                 
-                // ゾンビに当たった場合
                 if(hitObject.userData && hitObject.userData.isZombie) {
                     const rootZombie = hitObject.userData.root;
                     if(scene.children.includes(rootZombie)) {
@@ -587,11 +613,14 @@
                         if (rootZombie.userData.hp <= 0) {
                             scene.remove(rootZombie);
                             zombies = zombies.filter(z => z.userData.root !== rootZombie);
+                            
                             money += 10 + (wave * 2);
+                            score += 100 * wave; 
                             document.getElementById('money-display').innerText = money;
+                            document.getElementById('score-display').innerText = score;
 
                             if (zombies.length === 0) {
-                                updatePlayerHP(50); // 通常のウェーブクリア時にもHP回復
+                                updatePlayerHP(50); 
                                 wave++;
                                 document.getElementById('wave-display').innerText = wave;
                                 zombiesToKill += 3;
@@ -600,7 +629,6 @@
                         }
                     }
                 }
-                // 障害物に当たった場合は何もしない（火花エフェクトなどを入れることも可能）
             }
 
             const bulletGeo = new THREE.BufferGeometry().setFromPoints([gunTipPos, hitPoint]);
@@ -680,16 +708,103 @@
             hpBar.style.width = (playerHp / playerMaxHp * 100) + "%";
         }
 
+        // --- ゲームオーバー＆ランキング処理 ---
         function gameOver() {
             isGameOver = true;
             controls.unlock();
-            const startScreen = document.getElementById('start-screen');
-            startScreen.style.display = 'flex';
-            document.getElementById('start-text').innerText = "YOU DIED";
-            startScreen.style.backgroundColor = "rgba(150, 0, 0, 0.9)";
+            
+            const gameOverScreen = document.getElementById('game-over-screen');
+            gameOverScreen.style.display = 'flex';
+            document.getElementById('final-score-display').innerText = score;
+            
             clearTimeout(reloadTimeout);
             isReloading = false;
             reloadText.style.display = 'none';
+
+            fetchLeaderboard(10); // 初期表示は10件
+        }
+
+        async function registerScore() {
+            if (score <= 0) {
+                alert("スコアが0のため登録できません。");
+                return;
+            }
+
+            const nameInput = document.getElementById('nickname-input');
+            const nickname = nameInput.value.trim();
+            
+            // バリデーション（未入力チェック）
+            if (!nickname) {
+                alert("ニックネームを入力してください。");
+                return;
+            }
+
+            // 二重送信防止（ボタンを非活性にする）
+            const submitBtn = document.getElementById('submit-score-btn');
+            submitBtn.disabled = true;
+            submitBtn.innerText = "登録中...";
+
+            const { data, error } = await supabaseClient
+                .from('leaderboard')
+                .insert([{ name: nickname, score: score }]);
+
+            if (error) {
+                console.error("Insert Error:", error);
+                alert("登録に失敗しました。設定を確認してください。");
+                // 失敗した場合はボタンを再度有効にする
+                submitBtn.disabled = false;
+                submitBtn.innerText = "ランキングに登録";
+            } else {
+                alert("ランキングに登録しました！");
+                nameInput.disabled = true;
+                submitBtn.innerText = "登録完了";
+                fetchLeaderboard(10); // ランキングを再取得して表示を更新
+            }
+        }
+
+        window.submitScore = registerScore; 
+
+        // 更に表示ボタンの処理
+        window.fetchMoreLeaderboard = function() {
+            fetchLeaderboard(500); // 500件取得
+        }
+
+        async function fetchLeaderboard(limitValue) {
+            const list = document.getElementById('leaderboard-list');
+            const loadMoreBtn = document.getElementById('load-more-btn');
+            
+            if(limitValue === 10) list.innerHTML = '<li>読み込み中...</li>';
+
+            const { data, error } = await supabaseClient
+                .from('leaderboard')
+                .select('*')
+                .order('score', { ascending: false })
+                .limit(limitValue);
+
+            if (error) {
+                console.error("Fetch Error:", error);
+                list.innerHTML = '<li>ランキングの取得に失敗しました。</li>';
+                return;
+            }
+
+            list.innerHTML = '';
+            if (data.length === 0) {
+                list.innerHTML = '<li>まだ記録がありません。</li>';
+            } else {
+                data.forEach((entry, index) => {
+                    const li = document.createElement('li');
+                    li.innerHTML = `<span>#${index + 1} ${entry.name}</span> <span>${entry.score} pts</span>`;
+                    list.appendChild(li);
+                });
+            }
+
+            // トップ10表示で、かつデータが10件以上（続きがありそう）なら「更に表示」ボタンを出す
+            if (limitValue === 10 && data.length >= 10) {
+                loadMoreBtn.style.display = 'block';
+            } else {
+                // トップ500表示時、またはデータが10件未満ならボタンを隠す
+                loadMoreBtn.style.display = 'none';
+            }
         }
 
         function restartGame() { location.reload(); }
@@ -771,12 +886,11 @@
                 controls.camera.translateZ(velocity.z * delta);
                 controls.camera.position.y += velocity.y * delta;
 
-                // --- オブジェクトとの当たり判定（プレイヤー） ---
                 obstacles.forEach(obs => {
                     let dx = camera.position.x - obs.mesh.position.x;
                     let dz = camera.position.z - obs.mesh.position.z;
                     let distSq = dx * dx + dz * dz;
-                    let minRadius = obs.radius + 1.0; // プレイヤーの半径を1.0と仮定
+                    let minRadius = obs.radius + 1.0; 
                     
                     if (distSq < minRadius * minRadius && distSq > 0) {
                         let dist = Math.sqrt(distSq);
@@ -786,7 +900,6 @@
                     }
                 });
 
-                // マップ外壁制限
                 const playerLimit = mapLimit - 2; 
                 if (camera.position.x > playerLimit) camera.position.x = playerLimit;
                 if (camera.position.x < -playerLimit) camera.position.x = -playerLimit;
@@ -799,7 +912,6 @@
 
                 const uniqueZombies = [...new Set(zombies.map(z => z.userData.root))];
                 
-                // ゾンビ同士の重なり防止
                 for (let i = 0; i < uniqueZombies.length; i++) {
                     for (let j = i + 1; j < uniqueZombies.length; j++) {
                         const z1 = uniqueZombies[i];
@@ -816,11 +928,9 @@
                     }
                 }
 
-                // ゾンビの移動とゲロ攻撃
                 uniqueZombies.forEach(zombie => {
                     const distance = camera.position.distanceTo(zombie.position);
                     
-                    // --- ゲロ攻撃（Wave5以降、クールダウン管理、発射音付き） ---
                     if (wave >= 5 && time > zombie.userData.nextVomitTime && distance > 5 && distance < 20) {
                         const vomit = new THREE.Mesh(vomitGeo, vomitProjectilMat);
                         vomit.position.copy(zombie.position);
@@ -833,10 +943,8 @@
                         scene.add(vomit);
                         vomits.push({ mesh: vomit, dir: vDir, life: 4.0 });
                         
-                        // ゲロ発射音を鳴らす
                         playVomitSound();
                         
-                        // 次の攻撃までのクールダウン (25〜35秒後: 平均30秒)
                         zombie.userData.nextVomitTime = time + 25000 + Math.random() * 10000;
                     }
 
@@ -854,12 +962,11 @@
                     zombie.position.addScaledVector(directionToPlayer, zombieSpeed * delta);
                     zombie.lookAt(camera.position.x, zombie.position.y, camera.position.z);
                     
-                    // --- オブジェクトとの当たり判定（ゾンビ） ---
                     obstacles.forEach(obs => {
                         let dx = zombie.position.x - obs.mesh.position.x;
                         let dz = zombie.position.z - obs.mesh.position.z;
                         let distSq = dx * dx + dz * dz;
-                        let minRadius = obs.radius + 1.0; // ゾンビの半径
+                        let minRadius = obs.radius + 1.0; 
                         if (distSq < minRadius * minRadius && distSq > 0) {
                             let dist = Math.sqrt(distSq);
                             let overlap = minRadius - dist;
@@ -868,7 +975,6 @@
                         }
                     });
 
-                    // 壁を越えないように
                     if (zombie.position.x > playerLimit) zombie.position.x = playerLimit;
                     if (zombie.position.x < -playerLimit) zombie.position.x = -playerLimit;
                     if (zombie.position.z > playerLimit) zombie.position.z = playerLimit;
