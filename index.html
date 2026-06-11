@@ -80,7 +80,6 @@
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         const audioCtx = new AudioContext();
 
-        // 共通のノイズバッファを作成
         const bufferSize = audioCtx.sampleRate * 1.0;
         const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
         const output = noiseBuffer.getChannelData(0);
@@ -113,17 +112,15 @@
             noiseSource.stop(audioCtx.currentTime + decay);
         }
 
-        // 金属的なリロード音 (プロシージャル)
         function playReloadSound() {
             if (audioCtx.state === 'suspended') audioCtx.resume();
 
-            // 機械的な「カチャ・カチャ」という2連続音
             for (let i = 0; i < 2; i++) {
                 const noiseSource = audioCtx.createBufferSource();
                 noiseSource.buffer = noiseBuffer;
 
                 const filter = audioCtx.createBiquadFilter();
-                filter.type = 'bandpass'; // 金属的な響き
+                filter.type = 'bandpass'; 
                 filter.frequency.value = 2000 + i * 500;
                 filter.Q.value = 5;
 
@@ -132,11 +129,11 @@
                 filter.connect(gainNode);
                 gainNode.connect(audioCtx.destination);
 
-                const startTime = audioCtx.currentTime + i * 0.15; // 0.15秒ずらす
+                const startTime = audioCtx.currentTime + i * 0.15; 
                 const decay = 0.05;
 
                 gainNode.gain.setValueAtTime(0, startTime);
-                gainNode.gain.linearRampToValueAtTime(1.0, startTime + 0.005); // 素早いアタック
+                gainNode.gain.linearRampToValueAtTime(1.0, startTime + 0.005); 
                 gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + decay);
 
                 noiseSource.start(startTime);
@@ -192,7 +189,6 @@
             onPointerlockChange() {
                 if (document.pointerLockElement === this.domElement) {
                     this.isLocked = true;
-                    // 修正点: メニュー画面を確実に非表示にする
                     document.getElementById('start-screen').style.display = 'none';
                 } else {
                     this.isLocked = false;
@@ -223,7 +219,7 @@
 
         let bloodParticles = [];
 
-        // 武器のスペック（リロード設定）
+        // 武器のスペック
         const weapons = {
             'Pistol': { isAuto: false, fireRate: 0, damage: 34, recoil: 0.1, magSize: 10, reloadTime: 1500, spreadFactor: 0.01 },
             'SMG': { isAuto: true, fireRate: 80, damage: 20, recoil: 0.05, magSize: 30, reloadTime: 2000, spreadFactor: 0.008 },
@@ -232,9 +228,9 @@
 
         // --- Three.js セットアップ ---
         const scene = new THREE.Scene();
-        const desertSand = 0xd2b48c; // Tan color
+        const desertSand = 0xd2b48c;
         scene.background = new THREE.Color(desertSand);
-        scene.fog = new THREE.FogExp2(desertSand, 0.01); // 霧も砂色で
+        scene.fog = new THREE.FogExp2(desertSand, 0.01); 
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.y = 1.6;
@@ -244,56 +240,70 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4); // 環境光
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4); 
         scene.add(ambientLight);
         
-        const sunLight = new THREE.DirectionalLight(0xffffcc, 1.0); // 黄色みがかった明るい太陽光
+        const sunLight = new THREE.DirectionalLight(0xffffcc, 1.0); 
         sunLight.position.set(50, 100, 20);
         scene.add(sunLight);
 
-        const planeGeo = new THREE.PlaneGeometry(300, 300);
-        // 暗いグレーから砂色（テラコッタ）へ
+        // マップ設定
+        const mapSize = 300;
+        const mapLimit = mapSize / 2; // 150
+        const planeGeo = new THREE.PlaneGeometry(mapSize, mapSize);
         const groundMat = new THREE.MeshStandardMaterial({ color: 0xc2a278, roughness: 1.0 });
         const ground = new THREE.Mesh(planeGeo, groundMat);
         ground.rotation.x = -Math.PI / 2;
         scene.add(ground);
 
-        const buildingGeo = new THREE.BoxGeometry(10, 15, 10); // 高さを抑える
-        // テラコッタ色の壁
-        const wallMat = new THREE.MeshStandardMaterial({ color: 0xd9b382, roughness: 0.9 });
+        // --- 外壁の追加 ---
+        const wallThickness = 10;
+        const wallHeight = 40;
+        const outerWallGeoX = new THREE.BoxGeometry(mapSize + wallThickness * 2, wallHeight, wallThickness);
+        const outerWallGeoZ = new THREE.BoxGeometry(wallThickness, wallHeight, mapSize);
+        const outerWallMat = new THREE.MeshStandardMaterial({ color: 0xa88b68, roughness: 1.0 }); // 砂色の壁
+
+        const wallNorth = new THREE.Mesh(outerWallGeoX, outerWallMat);
+        wallNorth.position.set(0, wallHeight / 2, -mapLimit - wallThickness / 2);
         
-        // Crate（木箱）のモデリング（dust2の象徴）
+        const wallSouth = new THREE.Mesh(outerWallGeoX, outerWallMat);
+        wallSouth.position.set(0, wallHeight / 2, mapLimit + wallThickness / 2);
+        
+        const wallEast = new THREE.Mesh(outerWallGeoZ, outerWallMat);
+        wallEast.position.set(mapLimit + wallThickness / 2, wallHeight / 2, 0);
+        
+        const wallWest = new THREE.Mesh(outerWallGeoZ, outerWallMat);
+        wallWest.position.set(-mapLimit - wallThickness / 2, wallHeight / 2, 0);
+
+        scene.add(wallNorth, wallSouth, wallEast, wallWest);
+
+        // オブジェクトの配置
+        const buildingGeo = new THREE.BoxGeometry(10, 15, 10); 
+        const wallMat = new THREE.MeshStandardMaterial({ color: 0xd9b382, roughness: 0.9 });
         const crateGeo = new THREE.BoxGeometry(3, 3, 3);
-        // 茶色の木箱
         const crateMat = new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 1.0 });
-
-        // ドラム缶
         const drumGeo = new THREE.CylinderGeometry(1, 1, 3, 16);
-        const drumMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.7, roughness: 0.3 }); // 暗い金属
-
-        // Dust2アーチ（ブロックで組む）
+        const drumMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.7, roughness: 0.3 }); 
         const archPillarGeo = new THREE.BoxGeometry(2, 10, 2);
         const archTopGeo = new THREE.BoxGeometry(12, 2, 2);
 
         for(let i = 0; i < 40; i++) {
-            // 建物を配置
             const building = new THREE.Mesh(buildingGeo, wallMat);
             building.geometry = buildingGeo.clone();
             building.scale.y = 0.5 + Math.random() * 1.0; 
-            building.geometry.computeBoundingBox(); // スケール後の高さを反映
+            building.geometry.computeBoundingBox(); 
 
-            const bx = (Math.random() - 0.5) * 150;
-            const bz = (Math.random() - 0.5) * 150;
+            const bx = (Math.random() - 0.5) * (mapSize - 20);
+            const bz = (Math.random() - 0.5) * (mapSize - 20);
             building.position.set(bx, (building.scale.y * buildingGeo.parameters.height) / 2, bz);
 
             if (building.position.distanceTo(new THREE.Vector3(0, 0, 0)) > 25) {
                 scene.add(building);
             }
 
-            // 木箱を配置
             if (i % 2 === 0) {
-                const cx = (Math.random() - 0.5) * 130;
-                const cz = (Math.random() - 0.5) * 130;
+                const cx = (Math.random() - 0.5) * (mapSize - 30);
+                const cz = (Math.random() - 0.5) * (mapSize - 30);
                 
                 const stackHeight = Math.random() > 0.5 ? 2 : 1;
                 for(let j=0; j<stackHeight; j++) {
@@ -304,17 +314,15 @@
                     }
                 }
             }
-            // ドラム缶を配置
             if (i % 3 === 0) {
                 const drum = new THREE.Mesh(drumGeo, drumMat);
-                const dx = (Math.random() - 0.5) * 140;
-                const dz = (Math.random() - 0.5) * 140;
-                drum.position.set(dx, 1.5, dz); // 地面に設置
+                const dx = (Math.random() - 0.5) * (mapSize - 20);
+                const dz = (Math.random() - 0.5) * (mapSize - 20);
+                drum.position.set(dx, 1.5, dz); 
                 if (drum.position.distanceTo(new THREE.Vector3(0, 0, 0)) > 20) {
                     scene.add(drum);
                 }
             }
-            // アーチを配置
             if (i % 8 === 0) {
                 const archGroup = new THREE.Group();
                 const pillar1 = new THREE.Mesh(archPillarGeo, wallMat);
@@ -325,8 +333,8 @@
                 top.position.set(0, 11, 0);
                 archGroup.add(pillar1, pillar2, top);
 
-                const ax = (Math.random() - 0.5) * 120;
-                const az = (Math.random() - 0.5) * 120;
+                const ax = (Math.random() - 0.5) * (mapSize - 40);
+                const az = (Math.random() - 0.5) * (mapSize - 40);
                 archGroup.position.set(ax, 0, az);
                 archGroup.rotation.y = Math.random() * Math.PI;
                 if (archGroup.position.distanceTo(new THREE.Vector3(0, 0, 0)) > 25) {
@@ -337,7 +345,7 @@
 
         const gunGroup = new THREE.Group();
         gunGroup.position.set(0.3, -0.25, -0.5);
-        gunGroup.userData = { originalPosition: gunGroup.position.clone() }; // 元の姿勢を保存
+        gunGroup.userData = { originalPosition: gunGroup.position.clone() }; 
         camera.add(gunGroup);
 
         const muzzleLight = new THREE.PointLight(0xffaa00, 0, 5);
@@ -397,7 +405,7 @@
         }
         updateWeaponModel();
 
-        // --- バイオ2風 ゾンビテクスチャ ---
+        // ゾンビテクスチャ
         function createZombieTexture() {
             const canvas = document.createElement('canvas');
             canvas.width = 256; canvas.height = 256;
@@ -427,14 +435,22 @@
                 head.position.y = 1.7;
                 zombieGroup.add(body, head);
 
+                // 修正: プレイヤーを取り囲むように、かつ壁の内側にスポーン
                 const angle = Math.random() * Math.PI * 2;
                 const radius = 25 + Math.random() * 20;
-                zombieGroup.position.set(Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
+                let spawnX = camera.position.x + Math.cos(angle) * radius;
+                let spawnZ = camera.position.z + Math.sin(angle) * radius;
+                
+                // 壁を越えないようにクランプ
+                spawnX = Math.max(-mapLimit + 2, Math.min(mapLimit - 2, spawnX));
+                spawnZ = Math.max(-mapLimit + 2, Math.min(mapLimit - 2, spawnZ));
+
+                zombieGroup.position.set(spawnX, 0, spawnZ);
                 scene.add(zombieGroup);
                 
                 zombieGroup.userData = { isZombie: true, root: zombieGroup, hp: zombieHp };
                 body.userData = zombieGroup.userData; head.userData = zombieGroup.userData;
-                zombies.push(body, head); 
+                zombies.push(body, head); 
             }
         }
         spawnZombies(zombiesToKill);
@@ -452,15 +468,12 @@
         const bloodTexture = createBloodParticleTexture();
         const bloodMat = new THREE.SpriteMaterial({ map: bloodTexture, color: 0xffffff, transparent: true, opacity: 1.0 });
 
-        // --- コントローラー＆ジャンプ ---
-        // 修正: 復元したベースコードの PointerLockControls を感度調整付きコントロールに置き換え
         const controls = new MouseMoveControls(camera, document.body);
         
-        // 修正: 開始ボタンのクリックイベントを設定
         document.getElementById('start-button').addEventListener('click', () => {
             if (isGameOver) { restartGame(); return; }
             if (audioCtx.state === 'suspended') audioCtx.resume();
-            controls.lock(); //Ninejsの controls.lock()
+            controls.lock(); 
         });
 
         const velocity = new THREE.Vector3();
@@ -490,11 +503,9 @@
             if(e.code === 'ShiftLeft') isRunning = false;
         });
 
-        // 追加機能: 感度調整UIの制御
         const sensitivitySlider = document.getElementById('sensitivity-slider');
         const sensitivityValueDisplay = document.getElementById('sensitivity-value');
 
-        // スライダー変更イベント
         sensitivitySlider.addEventListener('input', () => {
             controls.sensitivity = parseFloat(sensitivitySlider.value);
             sensitivityValueDisplay.innerText = controls.sensitivity.toFixed(1);
@@ -511,26 +522,25 @@
             ammoBar.style.width = (currentAmmo / spec.magSize * 100) + "%";
         }
 
-        currentAmmo = weapons[currentWeapon].magSize; // 初期弾薬を設定
+        currentAmmo = weapons[currentWeapon].magSize; 
         updateAmmoUI();
 
         function reload() {
             const spec = weapons[currentWeapon];
             if (isReloading || isShopOpen || currentAmmo === spec.magSize || !controls.isLocked) return;
 
-            // リロード音を再生
             playReloadSound();
 
             isReloading = true;
             reloadText.style.display = 'inline';
-            gunGroup.position.z += 0.1; // リロードモーション（仮）
+            gunGroup.position.z += 0.1; 
 
             reloadTimeout = setTimeout(() => {
                 currentAmmo = spec.magSize;
                 updateAmmoUI();
                 isReloading = false;
                 reloadText.style.display = 'none';
-                gunGroup.position.z -= 0.1; // 戻す
+                gunGroup.position.z -= 0.1; 
             }, spec.reloadTime);
         }
         
@@ -542,7 +552,7 @@
             updateAmmoUI();
             playGunSound(currentWeapon);
 
-            if (currentAmmo <= 0) reload(); // 弾切れで自動リロード
+            if (currentAmmo <= 0) reload(); 
 
             muzzleLight.intensity = 2;
             gunGroup.position.z += weaponSpec.recoil; 
@@ -554,7 +564,7 @@
             
             const moveSpeed = new THREE.Vector3(velocity.x, 0, velocity.z).length();
             let spread = weaponSpec.spreadFactor * (1 + moveSpeed * 0.1);
-            if (isRunning) spread *= 2.5; // ダッシュ中は大幅にばらける
+            if (isRunning) spread *= 2.5; 
 
             const offset = new THREE.Vector3(
                 (Math.random() - 0.5) * spread,
@@ -566,11 +576,11 @@
             const gunTipPos = new THREE.Vector3();
             muzzleLight.getWorldPosition(gunTipPos);
 
-            let hitPoint = raycaster.ray.at(50, new THREE.Vector3()); // デフォルトの着弾点（ばらけた方向）
+            let hitPoint = raycaster.ray.at(50, new THREE.Vector3()); 
             const intersects = raycaster.intersectObjects(zombies);
             
             if (intersects.length > 0) {
-                hitPoint = intersects[0].point; // ゾンビにヒットした着弾点
+                hitPoint = intersects[0].point; 
                 const hitObject = intersects[0].object;
                 const rootZombie = hitObject.userData.root;
                 
@@ -614,20 +624,20 @@
                 const speed = 2 + Math.random() * 3;
                 const velocity = new THREE.Vector3(
                     (Math.random() - 0.5),
-                    (Math.random() - 0.2), // やや上向き
+                    (Math.random() - 0.2), 
                     (Math.random() - 0.5)
-                ).normalize().multiplyScalar(speed * 0.016); // 1フレームあたりの移動量に調整
+                ).normalize().multiplyScalar(speed * 0.016); 
 
                 bloodParticles.push({
                     sprite: particle,
                     velocity: velocity,
-                    life: 1.0, // 寿命（秒）
-                    gravity: -0.01 // 重力
+                    life: 1.0, 
+                    gravity: -0.01 
                 });
             }
         }
 
-        document.addEventListener('mousedown', (e) => { 
+        document.addEventListener('mousedown', (e) => { 
             if (e.button === 0 && controls.isLocked && !isShopOpen) {
                 isMouseDown = true;
                 if (!weapons[currentWeapon].isAuto) shoot();
@@ -655,7 +665,7 @@
                 currentWeapon = name;
                 document.getElementById('weapon-display').innerText = currentWeapon;
                 updateWeaponModel();
-                currentAmmo = weapons[currentWeapon].magSize; // 武器変更時に弾薬を満タンに
+                currentAmmo = weapons[currentWeapon].magSize; 
                 updateAmmoUI();
             }
         }
@@ -676,7 +686,7 @@
                 playerHp = 0;
                 gameOver();
             }
-            hpDisplay.innerText = Math.floor(playerHp); // 小数点以下を切り捨てて表示
+            hpDisplay.innerText = Math.floor(playerHp); 
             hpBar.style.width = (playerHp / playerMaxHp * 100) + "%";
         }
 
@@ -693,7 +703,7 @@
         }
 
         function restartGame() {
-            location.reload(); // ページをリロードしてゲームを初期化
+            location.reload(); 
         }
 
         window.addEventListener('resize', () => {
@@ -728,19 +738,18 @@
 
             for (let i = bloodParticles.length - 1; i >= 0; i--) {
                 const p = bloodParticles[i];
-                p.life -= delta; // 寿命を減らす
+                p.life -= delta; 
 
                 if (p.life <= 0) {
                     scene.remove(p.sprite);
                     bloodParticles.splice(i, 1);
                 } else {
-                    p.velocity.y += p.gravity * delta * 60; // フレームレート補正
+                    p.velocity.y += p.gravity * delta * 60; 
                     p.sprite.position.add(p.velocity);
                     p.sprite.material.opacity = p.life;
                 }
             }
 
-            // 反動リカバー (復元したベースコードのLERP)
             if (!isReloading) {
                 gunGroup.position.x = THREE.MathUtils.lerp(gunGroup.position.x, gunGroup.userData.originalPosition.x, 0.1);
                 gunGroup.position.y = THREE.MathUtils.lerp(gunGroup.position.y, gunGroup.userData.originalPosition.y, 0.1);
@@ -749,18 +758,14 @@
             }
 
             if (controls.isLocked && !isGameOver) {
-                // 復元したベースコードの物理・移動ロジック
                 velocity.y -= 30.0 * delta; 
                 velocity.x -= velocity.x * 10.0 * delta;
                 velocity.z -= velocity.z * 10.0 * delta;
 
                 direction.z = Number(moveState.forward) - Number(moveState.backward);
-                // 修正点: Aキーで左に移動するように、direction.x の計算を逆にする
-                // 復元前: direction.x = Number(moveState.right) - Number(moveState.left); // D-A -> 右が正、左が負
-                direction.x = Number(moveState.left) - Number(moveState.right); // A-D -> 左が正、右が負
-                direction.normalize(); 
+                direction.x = Number(moveState.left) - Number(moveState.right); 
+                direction.normalize(); 
 
-                // 速度設定（ダッシュ時は速く）
                 const baseSpeed = 40.0;
                 let playerSpeed = baseSpeed;
                 if (isRunning) playerSpeed *= 1.8;
@@ -770,36 +775,63 @@
                 if (moveState.forward || moveState.backward) velocity.z -= direction.z * playerSpeed * delta;
                 if (moveState.left || moveState.right) velocity.x -= direction.x * playerSpeed * delta;
 
-                // 修正: MouseMoveControls の moveRight/moveForward を使用
-                // direction.x の計算を逆にしたので、moveRight への適用方法も調整
-                // Aキー(left=true) -> dir.x=1 -> vel.x-=1*spd -> vel.xは負
-                // negative vel.x to moveRight moves left relative to camera.
-                // controls.moveRight(-velocity.x * delta); // 復元前
-                controls.camera.translateX(velocity.x * delta); // 直接カメラを動かす（左キーで負のtranslateXは左移動）
+                controls.camera.translateX(velocity.x * delta);
                 controls.camera.translateZ(velocity.z * delta);
                 controls.camera.position.y += velocity.y * delta;
+
+                // --- プレイヤーのマップ外移動制限 ---
+                const playerLimit = mapLimit - 2; // 壁の少し手前で止める
+                if (camera.position.x > playerLimit) camera.position.x = playerLimit;
+                if (camera.position.x < -playerLimit) camera.position.x = -playerLimit;
+                if (camera.position.z > playerLimit) camera.position.z = playerLimit;
+                if (camera.position.z < -playerLimit) camera.position.z = -playerLimit;
 
                 if (camera.position.y < 1.6) {
                     velocity.y = 0; camera.position.y = 1.6; canJump = true;
                 }
 
                 const uniqueZombies = [...new Set(zombies.map(z => z.userData.root))];
+                
+                // --- 敵同士の重なり防止（Separation） ---
+                for (let i = 0; i < uniqueZombies.length; i++) {
+                    for (let j = i + 1; j < uniqueZombies.length; j++) {
+                        const z1 = uniqueZombies[i];
+                        const z2 = uniqueZombies[j];
+                        const distSq = z1.position.distanceToSquared(z2.position);
+                        const minRadius = 1.5; // ゾンビの当たり判定の半径
+                        if (distSq < minRadius * minRadius && distSq > 0) {
+                            const dist = Math.sqrt(distSq);
+                            const pushDir = new THREE.Vector3().subVectors(z1.position, z2.position).normalize();
+                            const overlap = (minRadius - dist) * 0.5; // 半分ずつ押し戻す
+                            z1.position.addScaledVector(pushDir, overlap);
+                            z2.position.addScaledVector(pushDir, -overlap);
+                        }
+                    }
+                }
+
+                // 敵の移動処理
                 uniqueZombies.forEach(zombie => {
                     const zombieBaseSpeed = 2;
-                    const zombieSpeed = zombieBaseSpeed + (wave - 1) * 0.2; 
+                    const zombieSpeed = zombieBaseSpeed + (wave - 1) * 0.2; 
                     
                     const directionToPlayer = new THREE.Vector3();
                     directionToPlayer.subVectors(camera.position, zombie.position);
                     
                     const distance = directionToPlayer.length();
-                    if (distance < 1.8) { // ゾンビの攻撃範囲（接触）
-                        updatePlayerHP(-20 * delta); 
+                    if (distance < 1.8) { 
+                        updatePlayerHP(-20 * delta); 
                     }
 
-                    directionToPlayer.y = 0; 
+                    directionToPlayer.y = 0; 
                     directionToPlayer.normalize();
                     zombie.position.addScaledVector(directionToPlayer, zombieSpeed * delta);
                     zombie.lookAt(camera.position.x, zombie.position.y, camera.position.z);
+                    
+                    // ゾンビも壁を越えないようにする
+                    if (zombie.position.x > playerLimit) zombie.position.x = playerLimit;
+                    if (zombie.position.x < -playerLimit) zombie.position.x = -playerLimit;
+                    if (zombie.position.z > playerLimit) zombie.position.z = playerLimit;
+                    if (zombie.position.z < -playerLimit) zombie.position.z = -playerLimit;
                 });
             }
 
