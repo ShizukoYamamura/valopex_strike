@@ -493,6 +493,7 @@
                 const uniqueZombies = [...new Set(zombies.map(z => z.userData.root))];
                 uniqueZombies.forEach(z => scene.remove(z));
                 zombies = [];
+                updatePlayerHP(50); // ウェーブスキップ時にもHP回復
                 wave++;
                 document.getElementById('wave-display').innerText = wave;
                 zombiesToKill += 3;
@@ -590,6 +591,7 @@
                             document.getElementById('money-display').innerText = money;
 
                             if (zombies.length === 0) {
+                                updatePlayerHP(50); // 通常のウェーブクリア時にもHP回復
                                 wave++;
                                 document.getElementById('wave-display').innerText = wave;
                                 zombiesToKill += 3;
