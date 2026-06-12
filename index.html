@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -31,7 +31,6 @@
         #game-over-screen { background: rgba(100,0,0,0.9); color: white; display: none; }
         
         #instructions { text-align: center; margin-top: 20px; color: #aaa; line-height: 1.6; }
-        .dev-command { color: #f39c12; font-size: 14px; margin-top: 15px; border-top: 1px solid #333; padding-top: 10px;}
         
         /* HP・弾薬バー */
         .hud-bar-container { width: 200px; height: 10px; background: rgba(100, 100, 100, 0.5); border-radius: 5px; margin-top: 5px; }
@@ -62,74 +61,195 @@
 <body>
     <div id="start-screen">
         <h1 style="font-size: 56px; margin-bottom: 10px; font-family: serif;">VALOPEX STRIKE</h1>
-        <p style="font-size: 20px; color: white;">開始ボタンをクリックしてゲームスタート</p> 
-        <button id="start-button" class="shop-btn" style="width: auto; padding: 15px 40px; background: #8a0303; font-family: inherit; font-weight: bold;">開始</button>
+        
+        <div style="margin-bottom: 20px; pointer-events: auto;">
+            <select id="lang-select" style="padding: 5px 10px; font-size: 16px; background: #222; color: white; border: 1px solid #444; border-radius: 4px; outline: none; cursor: pointer;">
+                <option value="en">English</option>
+                <option value="ja">日本語</option>
+            </select>
+        </div>
+
+        <p style="font-size: 20px; color: white;" id="start-text">Click the start button to play</p> 
+        <button id="start-button" class="shop-btn" style="width: auto; padding: 15px 40px; background: #8a0303; font-family: inherit; font-weight: bold;">START</button>
         <div id="instructions">
-            移動: W A S D &nbsp;|&nbsp; 視点: マウス<br>
-            ジャンプ: SPACE &nbsp;|&nbsp; ダッシュ: LEFT SHIFT<br>
-            射撃: 左クリック &nbsp;|&nbsp; リロード: Rキー<br>
-            ショップ: Bキー
+            Move: W A S D &nbsp;|&nbsp; Look: Mouse<br>Jump: SPACE &nbsp;|&nbsp; Sprint: LEFT SHIFT<br>Shoot: Left Click &nbsp;|&nbsp; Reload: R Key<br>Shop: B Key
         </div>
         <div id="sensitivity-control" style="margin-top: 20px;">
-            <label for="sensitivity-slider" style="color: #ccc;">感度: <span id="sensitivity-value">1.0</span></label><br>
+            <label for="sensitivity-slider" style="color: #ccc;"><span id="sens-label-text">Sensitivity: </span><span id="sensitivity-value">1.0</span></label><br>
             <input type="range" id="sensitivity-slider" min="0.1" max="5.0" step="0.1" value="1.0" style="width: 200px; pointer-events: auto;">
         </div>
     </div>
 
     <div id="game-over-screen">
-        <h1 style="font-size: 64px; margin-bottom: 10px; font-family: serif;">YOU DIED</h1>
-        <h2 style="font-size: 32px; color: #f1c40f; margin-bottom: 20px;">FINAL SCORE: <span id="final-score-display">0</span></h2>
+        <h1 id="game-over-title" style="font-size: 64px; margin-bottom: 10px; font-family: serif;">YOU DIED</h1>
+        <h2 style="font-size: 32px; color: #f1c40f; margin-bottom: 20px;"><span id="final-score-label">FINAL SCORE: </span><span id="final-score-display">0</span></h2>
         
         <div>
             <input type="text" id="nickname-input" placeholder="Nickname (Max 10)" maxlength="10" style="padding: 10px; font-size: 18px; border-radius: 4px; border: none; outline: none; text-align: center;">
-            <button id="submit-score-btn" onclick="submitScore()" class="shop-btn" style="width: auto; padding: 10px 20px; margin-left: 10px; background: #27ae60;">ランキングに登録</button>
+            <button id="submit-score-btn" onclick="submitScore()" class="shop-btn" style="width: auto; padding: 10px 20px; margin-left: 10px; background: #27ae60;">Submit Rank</button>
         </div>
 
         <div id="leaderboard-box">
-            <h3>GLOBAL RANKING</h3>
+            <h3 id="global-rank-title">GLOBAL RANKING</h3>
             <ul id="leaderboard-list">
-                <li>読み込み中...</li>
+                <li id="loading-rank-text">Loading...</li>
             </ul>
-            <button id="load-more-btn" onclick="fetchMoreLeaderboard()" class="shop-btn" style="display: none; padding: 5px 15px; margin-top: 10px; font-size: 14px;">更に表示</button>
+            <button id="load-more-btn" onclick="fetchMoreLeaderboard()" class="shop-btn" style="display: none; padding: 5px 15px; margin-top: 10px; font-size: 14px;">Load More</button>
         </div>
 
-        <button onclick="restartGame()" class="shop-btn" style="width: auto; padding: 10px 30px; margin-top: 30px; background: #555;">もう一度プレイ</button>
+        <button id="restart-btn" onclick="restartGame()" class="shop-btn" style="width: auto; padding: 10px 30px; margin-top: 30px; background: #555;">PLAY AGAIN</button>
     </div>
 
     <div id="ui-layer">
         <div id="damage-overlay"></div>
         <div id="crosshair">+</div>
         <div id="hud">
-            <div>WAVE: <span id="wave-display" style="color: #e74c3c; font-weight: bold;">1</span></div>
-            <div>SCORE: <span id="score-display" style="color: #f1c40f; font-weight: bold;">0</span></div>
-            <div style="color: #2ecc71;">MONEY: $<span id="money-display">0</span></div>
-            <div style="margin-top: 10px; font-size: 18px;">HP: <span id="hp-display">100</span> / 100</div>
+            <div><span id="wave-label">WAVE: </span><span id="wave-display" style="color: #e74c3c; font-weight: bold;">1</span></div>
+            <div><span id="score-label">SCORE: </span><span id="score-display" style="color: #f1c40f; font-weight: bold;">0</span></div>
+            <div style="color: #2ecc71;"><span id="money-label">MONEY: $</span><span id="money-display">0</span></div>
+            <div style="margin-top: 10px; font-size: 18px;"><span id="hp-label">HP: </span><span id="hp-display">100</span> / 100</div>
             <div class="hud-bar-container"><div id="hp-bar" class="hud-bar"></div></div>
-            <div style="margin-top: 10px; font-size: 18px;">AMMO: <span id="ammo-display">-- / --</span> <span id="reload-text" style="color: #e74c3c; font-weight: bold; display: none; margin-left: 10px;">RELOADING...</span></div>
+            <div style="margin-top: 10px; font-size: 18px;"><span id="ammo-label">AMMO: </span><span id="ammo-display">-- / --</span> <span id="reload-text" style="color: #e74c3c; font-weight: bold; display: none; margin-left: 10px;">RELOADING...</span></div>
             <div class="hud-bar-container"><div id="ammo-bar" class="hud-bar"></div></div>
-            <div style="margin-top: 10px; font-size: 18px;">WEAPON: <span id="weapon-display">Pistol</span></div>
+            <div style="margin-top: 10px; font-size: 18px;"><span id="weapon-label">WEAPON: </span><span id="weapon-display">Pistol</span></div>
         </div>
         
         <div id="shop-screen">
-            <h2 style="margin-top: 0; color: #f1c40f;">SHOP</h2>
-            <p>所持金: $<span id="shop-money-display">0</span></p>
+            <h2 id="shop-title" style="margin-top: 0; color: #f1c40f;">SHOP</h2>
+            <p><span id="shop-money-label">Money: $</span><span id="shop-money-display">0</span></p>
             <button class="shop-btn" onclick="buyWeapon('SMG', 500)">MAC-10 SMG ($500)</button>
             <button class="shop-btn" onclick="buyWeapon('Assault Rifle', 1500)">AK-47 ($1500)</button>
             <hr style="border-color: #444; margin: 20px 0;">
-            <button class="shop-btn" style="background: #e74c3c;" onclick="closeShop()">閉じる</button>
+            <button id="close-shop-btn" class="shop-btn" style="background: #e74c3c;" onclick="closeShop()">CLOSE</button>
         </div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
     <script>
+        // --- 翻訳用辞書 ---
+        const tDict = {
+            en: {
+                startText: "Click the start button to play",
+                startBtn: "START",
+                instText: "Move: W A S D &nbsp;|&nbsp; Look: Mouse<br>Jump: SPACE &nbsp;|&nbsp; Sprint: LEFT SHIFT<br>Shoot: Left Click &nbsp;|&nbsp; Reload: R Key<br>Shop: B Key",
+                sensLabel: "Sensitivity: ",
+                wave: "WAVE: ",
+                score: "SCORE: ",
+                money: "MONEY: $",
+                hp: "HP: ",
+                ammo: "AMMO: ",
+                reloadText: "RELOADING...",
+                weapon: "WEAPON: ",
+                shopTitle: "SHOP",
+                shopMoney: "Money: $",
+                closeShop: "CLOSE",
+                gameOver: "YOU DIED",
+                finalScore: "FINAL SCORE: ",
+                nickPlaceholder: "Nickname (Max 10)",
+                submitBtn: "Submit Rank",
+                globalRank: "GLOBAL RANKING",
+                loadingRank: "Loading...",
+                noRank: "No records yet.",
+                rankFailed: "Failed to load ranking.",
+                restartBtn: "PLAY AGAIN",
+                loadMore: "Load More",
+                alertZero: "Score is 0. Cannot submit.",
+                alertNoName: "Please enter a nickname.",
+                alertFail: "Registration failed. Please check your settings.",
+                alertSuccess: "Registered to the leaderboard!",
+                submitting: "Submitting...",
+                registered: "Registered"
+            },
+            ja: {
+                startText: "開始ボタンをクリックしてゲームスタート",
+                startBtn: "開始",
+                instText: "移動: W A S D &nbsp;|&nbsp; 視点: マウス<br>ジャンプ: SPACE &nbsp;|&nbsp; ダッシュ: LEFT SHIFT<br>射撃: 左クリック &nbsp;|&nbsp; リロード: Rキー<br>ショップ: Bキー",
+                sensLabel: "感度: ",
+                wave: "WAVE: ",
+                score: "SCORE: ",
+                money: "MONEY: $",
+                hp: "HP: ",
+                ammo: "AMMO: ",
+                reloadText: "RELOADING...",
+                weapon: "WEAPON: ",
+                shopTitle: "SHOP",
+                shopMoney: "所持金: $",
+                closeShop: "閉じる",
+                gameOver: "YOU DIED",
+                finalScore: "FINAL SCORE: ",
+                nickPlaceholder: "ニックネーム (最大10文字)",
+                submitBtn: "ランキングに登録",
+                globalRank: "GLOBAL RANKING",
+                loadingRank: "読み込み中...",
+                noRank: "まだ記録がありません。",
+                rankFailed: "ランキングの取得に失敗しました。",
+                restartBtn: "もう一度プレイ",
+                loadMore: "更に表示",
+                alertZero: "スコアが0のため登録できません。",
+                alertNoName: "ニックネームを入力してください。",
+                alertFail: "登録に失敗しました。設定を確認してください。",
+                alertSuccess: "ランキングに登録しました！",
+                submitting: "登録中...",
+                registered: "登録完了"
+            }
+        };
+
+        // --- 言語切り替えロジック ---
+        let currentLang = localStorage.getItem('valopex_lang') || 'en';
+        
+        function applyLanguage(lang) {
+            currentLang = lang;
+            localStorage.setItem('valopex_lang', lang);
+            const t = tDict[lang];
+            
+            document.getElementById('start-text').innerText = t.startText;
+            document.getElementById('start-button').innerText = t.startBtn;
+            document.getElementById('instructions').innerHTML = t.instText;
+            document.getElementById('sens-label-text').innerText = t.sensLabel;
+            
+            document.getElementById('wave-label').innerText = t.wave;
+            document.getElementById('score-label').innerText = t.score;
+            document.getElementById('money-label').innerText = t.money;
+            document.getElementById('hp-label').innerText = t.hp;
+            document.getElementById('ammo-label').innerText = t.ammo;
+            document.getElementById('reload-text').innerText = t.reloadText;
+            document.getElementById('weapon-label').innerText = t.weapon;
+            
+            document.getElementById('shop-title').innerText = t.shopTitle;
+            document.getElementById('shop-money-label').innerText = t.shopMoney;
+            document.getElementById('close-shop-btn').innerText = t.closeShop;
+            
+            document.getElementById('game-over-title').innerText = t.gameOver;
+            document.getElementById('final-score-label').innerText = t.finalScore;
+            document.getElementById('nickname-input').placeholder = t.nickPlaceholder;
+            
+            const submitBtn = document.getElementById('submit-score-btn');
+            if(!submitBtn.disabled) submitBtn.innerText = t.submitBtn;
+            
+            document.getElementById('global-rank-title').innerText = t.globalRank;
+            document.getElementById('restart-btn').innerText = t.restartBtn;
+            document.getElementById('load-more-btn').innerText = t.loadMore;
+            
+            const loadingTextObj = document.getElementById('loading-rank-text');
+            if (loadingTextObj) loadingTextObj.innerText = t.loadingRank;
+        }
+
+        const langSelect = document.getElementById('lang-select');
+        langSelect.value = currentLang;
+        applyLanguage(currentLang);
+
+        langSelect.addEventListener('change', (e) => {
+            applyLanguage(e.target.value);
+        });
+
         // --- Supabase 初期化 ---
         // ※以下のURLとKEYを自分のSupabaseプロジェクトのものに書き換えてください
         const SUPABASE_URL = 'https://wruyddcigpisuqeorems.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndydXlkZGNpZ3Bpc3VxZW9yZW1zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExODM2MzcsImV4cCI6MjA5Njc1OTYzN30.qEZg0bMMg0LLxNKXE4O94nnhe_2URTDlEG3YMxxpGT0';
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        // --- Web Audio API (プロシージャルサウンド) ---
+        // --- Web Audio API ---
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         const audioCtx = new AudioContext();
         const bufferSize = audioCtx.sampleRate * 1.0;
@@ -491,6 +611,20 @@
 
         const controls = new MouseMoveControls(camera, document.body);
         
+        // --- 感度の復元 ---
+        const savedSensitivity = localStorage.getItem('valopex_sensitivity') || '1.0';
+        const sensitivitySlider = document.getElementById('sensitivity-slider');
+        const sensitivityValueDisplay = document.getElementById('sensitivity-value');
+        sensitivitySlider.value = savedSensitivity;
+        controls.sensitivity = parseFloat(savedSensitivity);
+        sensitivityValueDisplay.innerText = controls.sensitivity.toFixed(1);
+
+        sensitivitySlider.addEventListener('input', () => {
+            controls.sensitivity = parseFloat(sensitivitySlider.value);
+            sensitivityValueDisplay.innerText = controls.sensitivity.toFixed(1);
+            localStorage.setItem('valopex_sensitivity', sensitivitySlider.value);
+        });
+
         document.getElementById('start-button').addEventListener('click', () => {
             if (isGameOver) { restartGame(); return; }
             if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -536,12 +670,6 @@
             if(e.code === 'KeyA') moveState.left = false;
             if(e.code === 'KeyD') moveState.right = false;
             if(e.code === 'ShiftLeft') isRunning = false;
-        });
-
-        const sensitivitySlider = document.getElementById('sensitivity-slider');
-        sensitivitySlider.addEventListener('input', () => {
-            controls.sensitivity = parseFloat(sensitivitySlider.value);
-            document.getElementById('sensitivity-value').innerText = controls.sensitivity.toFixed(1);
         });
 
         const raycaster = new THREE.Raycaster();
@@ -723,28 +851,28 @@
             isReloading = false;
             reloadText.style.display = 'none';
 
-            fetchLeaderboard(10); // 初期表示は10件
+            fetchLeaderboard(10); 
         }
 
         async function registerScore() {
+            const t = tDict[currentLang];
+
             if (score <= 0) {
-                alert("スコアが0のため登録できません。");
+                alert(t.alertZero);
                 return;
             }
 
             const nameInput = document.getElementById('nickname-input');
             const nickname = nameInput.value.trim();
             
-            // バリデーション（未入力チェック）
             if (!nickname) {
-                alert("ニックネームを入力してください。");
+                alert(t.alertNoName);
                 return;
             }
 
-            // 二重送信防止（ボタンを非活性にする）
             const submitBtn = document.getElementById('submit-score-btn');
             submitBtn.disabled = true;
-            submitBtn.innerText = "登録中...";
+            submitBtn.innerText = t.submitting;
 
             const { data, error } = await supabaseClient
                 .from('leaderboard')
@@ -752,30 +880,29 @@
 
             if (error) {
                 console.error("Insert Error:", error);
-                alert("登録に失敗しました。設定を確認してください。");
-                // 失敗した場合はボタンを再度有効にする
+                alert(t.alertFail);
                 submitBtn.disabled = false;
-                submitBtn.innerText = "ランキングに登録";
+                submitBtn.innerText = t.submitBtn;
             } else {
-                alert("ランキングに登録しました！");
+                alert(t.alertSuccess);
                 nameInput.disabled = true;
-                submitBtn.innerText = "登録完了";
-                fetchLeaderboard(10); // ランキングを再取得して表示を更新
+                submitBtn.innerText = t.registered;
+                fetchLeaderboard(10); 
             }
         }
 
         window.submitScore = registerScore; 
 
-        // 更に表示ボタンの処理
         window.fetchMoreLeaderboard = function() {
-            fetchLeaderboard(500); // 500件取得
+            fetchLeaderboard(500); 
         }
 
         async function fetchLeaderboard(limitValue) {
+            const t = tDict[currentLang];
             const list = document.getElementById('leaderboard-list');
             const loadMoreBtn = document.getElementById('load-more-btn');
             
-            if(limitValue === 10) list.innerHTML = '<li>読み込み中...</li>';
+            if(limitValue === 10) list.innerHTML = `<li><span id="loading-rank-text">${t.loadingRank}</span></li>`;
 
             const { data, error } = await supabaseClient
                 .from('leaderboard')
@@ -785,13 +912,13 @@
 
             if (error) {
                 console.error("Fetch Error:", error);
-                list.innerHTML = '<li>ランキングの取得に失敗しました。</li>';
+                list.innerHTML = `<li>${t.rankFailed}</li>`;
                 return;
             }
 
             list.innerHTML = '';
             if (data.length === 0) {
-                list.innerHTML = '<li>まだ記録がありません。</li>';
+                list.innerHTML = `<li>${t.noRank}</li>`;
             } else {
                 data.forEach((entry, index) => {
                     const li = document.createElement('li');
@@ -800,11 +927,9 @@
                 });
             }
 
-            // トップ10表示で、かつデータが10件以上（続きがありそう）なら「更に表示」ボタンを出す
             if (limitValue === 10 && data.length >= 10) {
                 loadMoreBtn.style.display = 'block';
             } else {
-                // トップ500表示時、またはデータが10件未満ならボタンを隠す
                 loadMoreBtn.style.display = 'none';
             }
         }
@@ -876,10 +1001,9 @@
                 direction.x = Number(moveState.left) - Number(moveState.right); 
                 direction.normalize(); 
 
-                const baseSpeed = 25.0; 
+                const baseSpeed = 35.0; 
                 let playerSpeed = baseSpeed;
                 if (isRunning) playerSpeed *= 1.6;
-                if (isReloading || (isRunning && isReloading)) playerSpeed = baseSpeed;
 
                 if (moveState.forward || moveState.backward) velocity.z -= direction.z * playerSpeed * delta;
                 if (moveState.left || moveState.right) velocity.x -= direction.x * playerSpeed * delta;
