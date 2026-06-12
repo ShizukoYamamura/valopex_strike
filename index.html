@@ -4,8 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Valopex Strike</title>
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9908835148006630"
-        crossorigin="anonymous"></script>
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9908835148006630" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #000; user-select: none; }
@@ -26,11 +25,13 @@
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             display: flex; flex-direction: column;
             align-items: center; justify-content: center; pointer-events: auto; z-index: 10;
+            overflow-y: auto; /* 画面が小さい時用にスクロール許可 */
+            padding: 20px 0; box-sizing: border-box;
         }
         #start-screen { background: rgba(0,0,0,0.9); color: #8a0303; }
         #game-over-screen { background: rgba(100,0,0,0.9); color: white; display: none; }
         
-        #instructions { text-align: center; margin-top: 20px; color: #aaa; line-height: 1.6; }
+        #instructions { text-align: center; margin-top: 15px; color: #aaa; line-height: 1.6; font-size: 14px; }
         
         /* HP・弾薬バー */
         .hud-bar-container { width: 200px; height: 10px; background: rgba(100, 100, 100, 0.5); border-radius: 5px; margin-top: 5px; }
@@ -45,38 +46,50 @@
             opacity: 0; transition: opacity 0.2s; pointer-events: none;
         }
 
-        /* ランキングUI用 */
-        #leaderboard-box { margin-top: 20px; background: rgba(0,0,0,0.7); padding: 15px; border-radius: 8px; width: 320px; text-align: center; max-height: 300px; overflow-y: auto; }
-        #leaderboard-box h3 { margin: 0 0 10px 0; color: #f1c40f; }
-        #leaderboard-list { list-style: none; padding: 0; margin: 0; text-align: left; }
-        #leaderboard-list li { display: flex; justify-content: space-between; font-size: 16px; margin-bottom: 5px; border-bottom: 1px solid #444; padding-bottom: 5px; }
+        /* ランキングUI用（クラス化して複数配置対応） */
+        .leaderboard-box { background: rgba(0,0,0,0.7); padding: 15px; border-radius: 8px; width: 320px; text-align: center; overflow-y: auto; }
+        #start-screen .leaderboard-box { max-height: 160px; margin-top: 15px; margin-bottom: 20px; }
+        #game-over-screen .leaderboard-box { max-height: 250px; margin-top: 20px; }
+        .leaderboard-box h3 { margin: 0 0 10px 0; color: #f1c40f; font-size: 18px; }
+        .leaderboard-list { list-style: none; padding: 0; margin: 0; text-align: left; }
+        .leaderboard-list li { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px; border-bottom: 1px solid #444; padding-bottom: 5px; }
         
         /* スクロールバーの装飾 */
-        #leaderboard-box::-webkit-scrollbar { width: 8px; }
-        #leaderboard-box::-webkit-scrollbar-track { background: #222; border-radius: 4px; }
-        #leaderboard-box::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
-        #leaderboard-box::-webkit-scrollbar-thumb:hover { background: #777; }
+        .leaderboard-box::-webkit-scrollbar { width: 8px; }
+        .leaderboard-box::-webkit-scrollbar-track { background: #222; border-radius: 4px; }
+        .leaderboard-box::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+        .leaderboard-box::-webkit-scrollbar-thumb:hover { background: #777; }
     </style>
 </head>
 <body>
     <div id="start-screen">
-        <h1 style="font-size: 56px; margin-bottom: 10px; font-family: serif;">VALOPEX STRIKE</h1>
+        <h1 style="font-size: 56px; margin-bottom: 10px; font-family: serif; margin-top: auto;">VALOPEX STRIKE</h1>
         
-        <div style="margin-bottom: 20px; pointer-events: auto;">
+        <div style="margin-bottom: 15px; pointer-events: auto;">
             <select id="lang-select" style="padding: 5px 10px; font-size: 16px; background: #222; color: white; border: 1px solid #444; border-radius: 4px; outline: none; cursor: pointer;">
                 <option value="en">English</option>
                 <option value="ja">日本語</option>
             </select>
         </div>
 
-        <p style="font-size: 20px; color: white;" id="start-text">Click the start button to play</p> 
-        <button id="start-button" class="shop-btn" style="width: auto; padding: 15px 40px; background: #8a0303; font-family: inherit; font-weight: bold;">START</button>
+        <p style="font-size: 20px; color: white; margin: 5px 0;" id="start-text">Click the start button to play</p> 
+        <button id="start-button" class="shop-btn" style="width: auto; padding: 15px 40px; background: #8a0303; font-family: inherit; font-weight: bold; margin: 10px 0;">START</button>
+        
         <div id="instructions">
             Move: W A S D &nbsp;|&nbsp; Look: Mouse<br>Jump: SPACE &nbsp;|&nbsp; Sprint: LEFT SHIFT<br>Shoot: Left Click &nbsp;|&nbsp; Reload: R Key<br>Shop: B Key
         </div>
-        <div id="sensitivity-control" style="margin-top: 20px;">
+        
+        <div id="sensitivity-control" style="margin-top: 15px;">
             <label for="sensitivity-slider" style="color: #ccc;"><span id="sens-label-text">Sensitivity: </span><span id="sensitivity-value">1.0</span></label><br>
             <input type="range" id="sensitivity-slider" min="0.1" max="5.0" step="0.1" value="1.0" style="width: 200px; pointer-events: auto;">
+        </div>
+
+        <div class="leaderboard-box">
+            <h3 class="global-rank-title">GLOBAL RANKING</h3>
+            <ul class="leaderboard-list">
+                <li class="loading-rank-text">Loading...</li>
+            </ul>
+            <button onclick="fetchMoreLeaderboard()" class="shop-btn load-more-btn" style="display: none; padding: 5px 15px; margin-top: 10px; font-size: 14px;">Load More</button>
         </div>
     </div>
 
@@ -89,12 +102,12 @@
             <button id="submit-score-btn" onclick="submitScore()" class="shop-btn" style="width: auto; padding: 10px 20px; margin-left: 10px; background: #27ae60;">Submit Rank</button>
         </div>
 
-        <div id="leaderboard-box">
-            <h3 id="global-rank-title">GLOBAL RANKING</h3>
-            <ul id="leaderboard-list">
-                <li id="loading-rank-text">Loading...</li>
+        <div class="leaderboard-box">
+            <h3 class="global-rank-title">GLOBAL RANKING</h3>
+            <ul class="leaderboard-list">
+                <li class="loading-rank-text">Loading...</li>
             </ul>
-            <button id="load-more-btn" onclick="fetchMoreLeaderboard()" class="shop-btn" style="display: none; padding: 5px 15px; margin-top: 10px; font-size: 14px;">Load More</button>
+            <button onclick="fetchMoreLeaderboard()" class="shop-btn load-more-btn" style="display: none; padding: 5px 15px; margin-top: 10px; font-size: 14px;">Load More</button>
         </div>
 
         <button id="restart-btn" onclick="restartGame()" class="shop-btn" style="width: auto; padding: 10px 30px; margin-top: 30px; background: #555;">PLAY AGAIN</button>
@@ -127,7 +140,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
     <script>
-    // 即時実行関数(IIFE)で全体を囲み、グローバル汚染を防ぐ（コンソールからの変数アクセスを遮断）
+    // 即時実行関数(IIFE)で全体を囲み、グローバル汚染を防ぐ
     (() => {
         // --- 翻訳用辞書 ---
         const tDict = {
@@ -228,12 +241,12 @@
             const submitBtn = document.getElementById('submit-score-btn');
             if(!submitBtn.disabled) submitBtn.innerText = t.submitBtn;
             
-            document.getElementById('global-rank-title').innerText = t.globalRank;
             document.getElementById('restart-btn').innerText = t.restartBtn;
-            document.getElementById('load-more-btn').innerText = t.loadMore;
-            
-            const loadingTextObj = document.getElementById('loading-rank-text');
-            if (loadingTextObj) loadingTextObj.innerText = t.loadingRank;
+
+            // 複数配置されたランキング要素の翻訳
+            document.querySelectorAll('.global-rank-title').forEach(el => el.innerText = t.globalRank);
+            document.querySelectorAll('.load-more-btn').forEach(el => el.innerText = t.loadMore);
+            document.querySelectorAll('.loading-rank-text').forEach(el => el.innerText = t.loadingRank);
         }
 
         const langSelect = document.getElementById('lang-select');
@@ -918,12 +931,13 @@
             fetchLeaderboard(500); 
         }
 
+        // 複数配置されたランキングを同時に更新する関数
         async function fetchLeaderboard(limitValue) {
             const t = tDict[currentLang];
-            const list = document.getElementById('leaderboard-list');
-            const loadMoreBtn = document.getElementById('load-more-btn');
+            const lists = document.querySelectorAll('.leaderboard-list');
+            const loadMoreBtns = document.querySelectorAll('.load-more-btn');
             
-            if(limitValue === 10) list.innerHTML = `<li><span id="loading-rank-text">${t.loadingRank}</span></li>`;
+            if(limitValue === 10) lists.forEach(list => list.innerHTML = `<li><span class="loading-rank-text">${t.loadingRank}</span></li>`);
 
             const { data, error } = await supabaseClient
                 .from('leaderboard')
@@ -933,25 +947,25 @@
 
             if (error) {
                 console.error("Fetch Error:", error);
-                list.innerHTML = `<li>${t.rankFailed}</li>`;
+                lists.forEach(list => list.innerHTML = `<li>${t.rankFailed}</li>`);
                 return;
             }
 
-            list.innerHTML = '';
+            lists.forEach(list => list.innerHTML = '');
             if (data.length === 0) {
-                list.innerHTML = `<li>${t.noRank}</li>`;
+                lists.forEach(list => list.innerHTML = `<li>${t.noRank}</li>`);
             } else {
+                let htmlString = '';
                 data.forEach((entry, index) => {
-                    const li = document.createElement('li');
-                    li.innerHTML = `<span>#${index + 1} ${entry.name}</span> <span>${entry.score} pts</span>`;
-                    list.appendChild(li);
+                    htmlString += `<li><span>#${index + 1} ${entry.name}</span> <span>${entry.score} pts</span></li>`;
                 });
+                lists.forEach(list => list.innerHTML = htmlString);
             }
 
             if (limitValue === 10 && data.length >= 10) {
-                loadMoreBtn.style.display = 'block';
+                loadMoreBtns.forEach(btn => btn.style.display = 'block');
             } else {
-                loadMoreBtn.style.display = 'none';
+                loadMoreBtns.forEach(btn => btn.style.display = 'none');
             }
         }
 
@@ -1133,6 +1147,9 @@
             prevTime = time;
         }
 
+        // 初期化時にランキングを取得してメニュー画面に表示する
+        fetchLeaderboard(10);
+        
         animate();
     })(); // 即時実行関数 ここまで
     </script>
