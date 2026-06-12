@@ -127,6 +127,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
     <script>
+    // 即時実行関数(IIFE)で全体を囲み、グローバル汚染を防ぐ（コンソールからの変数アクセスを遮断）
+    (() => {
         // --- 翻訳用辞書 ---
         const tDict = {
             en: {
@@ -195,7 +197,6 @@
             }
         };
 
-        // --- 言語切り替えロジック ---
         let currentLang = localStorage.getItem('valopex_lang') || 'en';
         
         function applyLanguage(lang) {
@@ -244,7 +245,6 @@
         });
 
         // --- Supabase 初期化 ---
-        // ※以下のURLとKEYを自分のSupabaseプロジェクトのものに書き換えてください
         const SUPABASE_URL = 'https://wruyddcigpisuqeorems.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndydXlkZGNpZ3Bpc3VxZW9yZW1zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExODM2MzcsImV4cCI6MjA5Njc1OTYzN30.qEZg0bMMg0LLxNKXE4O94nnhe_2URTDlEG3YMxxpGT0';
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -388,8 +388,27 @@
             unlock() { document.exitPointerLock(); }
         }
 
+        // --- アンチチート用変数群 ---
+        let _internalScore = 0; 
+        let _scoreHash = 0; // メモリ改ざん検知用のシャドウ変数
+        
+        function addScore(amount) {
+            _internalScore += amount;
+            _scoreHash += amount * 7; // 単純なハッシュ化
+            document.getElementById('score-display').innerText = getValidScore();
+        }
+        
+        function getValidScore() {
+            // スコアとハッシュに矛盾があればチートと判定
+            if (_internalScore * 7 !== _scoreHash) {
+                console.warn("Tampering detected.");
+                _internalScore = 0;
+                _scoreHash = 0;
+            }
+            return _internalScore;
+        }
+
         // --- ゲーム変数の初期化 ---
-        let score = 0;
         let money = 0; let wave = 1; let zombiesToKill = 5; let currentWeapon = 'Pistol';
         let zombies = []; let bullets = []; let vomits = []; let isShopOpen = false;
         let isReloading = false; let currentAmmo = 0; let reloadTimeout = null;
@@ -745,9 +764,8 @@
                             zombies = zombies.filter(z => z.userData.root !== rootZombie);
                             
                             money += 10 + (wave * 2);
-                            score += 100 * wave; 
+                            addScore(100 * wave); 
                             document.getElementById('money-display').innerText = money;
-                            document.getElementById('score-display').innerText = score;
 
                             if (zombies.length === 0) {
                                 updatePlayerHP(50); 
@@ -801,6 +819,8 @@
                 document.getElementById('shop-money-display').innerText = money;
             }
         }
+        
+        // HTMLのonclick属性から呼び出せるようにwindowオブジェクトに登録
         window.buyWeapon = function(name, price) {
             if (money >= price) {
                 money -= price;
@@ -845,7 +865,7 @@
             
             const gameOverScreen = document.getElementById('game-over-screen');
             gameOverScreen.style.display = 'flex';
-            document.getElementById('final-score-display').innerText = score;
+            document.getElementById('final-score-display').innerText = getValidScore();
             
             clearTimeout(reloadTimeout);
             isReloading = false;
@@ -856,8 +876,9 @@
 
         async function registerScore() {
             const t = tDict[currentLang];
+            const finalScore = getValidScore();
 
-            if (score <= 0) {
+            if (finalScore <= 0) {
                 alert(t.alertZero);
                 return;
             }
@@ -876,7 +897,7 @@
 
             const { data, error } = await supabaseClient
                 .from('leaderboard')
-                .insert([{ name: nickname, score: score }]);
+                .insert([{ name: nickname, score: finalScore }]);
 
             if (error) {
                 console.error("Insert Error:", error);
@@ -934,7 +955,7 @@
             }
         }
 
-        function restartGame() { location.reload(); }
+        window.restartGame = function() { location.reload(); }
 
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
@@ -1113,6 +1134,7 @@
         }
 
         animate();
+    })(); // 即時実行関数 ここまで
     </script>
 </body>
 </html>
